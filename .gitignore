@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+bin/
+tmp/
+dist/
+dist-ssr/
+bundles/
+web/dist/
+extension/bundles/
+*.tsbuildinfo
+
+# Database
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Logs
+*.log
+*-debug.log*
+
+# Misc
+.cache/
+*.tgz

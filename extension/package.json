@@ -1,0 +1,28 @@
+{
+  "name": "mangashelf-paperback-extension",
+  "private": true,
+  "description": "Paperback extension for the Mangashelf.",
+  "type": "module",
+  "scripts": {
+    "lint": "oxlint --type-aware --fix",
+    "lint:check": "oxlint --type-aware --deny-warnings",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "tsc": "tsc",
+    "test:smoke": "bun test",
+    "bundle": "bun x paperback-cli bundle",
+    "serve": "bun x paperback-cli serve",
+    "logcat": "bun x paperback-cli logcat",
+    "dev": "bun x paperback-cli serve --watch",
+    "test": "bun run tsc && bun run lint:check && bun run format:check && bun run test:smoke && bun run bundle"
+  },
+  "devDependencies": {
+    "@paperback/toolchain": "1.0.0-alpha.82",
+    "@paperback/types": "1.0.0-alpha.82",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0",
+    "oxlint-tsgolint": "^0.21.1",
+    "typescript": "^6.0.3"
+  },
+  "repositoryName": "Mangashelf"
+}

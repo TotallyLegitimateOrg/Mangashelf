@@ -1,0 +1,15 @@
+{
+  "name": "mangashelf",
+  "private": true,
+  "packageManager": "bun@1.3.13",
+  "workspaces": [
+    "web",
+    "extension"
+  ],
+  "scripts": {
+    "bootstrap": "bun install --frozen-lockfile",
+    "build:web": "cd web && bun run build",
+    "build:extension": "cd extension && bun run bundle",
+    "test:extension": "cd extension && bun run test"
+  }
+}

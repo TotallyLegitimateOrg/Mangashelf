@@ -1,0 +1,119 @@
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--space-6);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---- Ambient orbs ---- */
+.login-page__bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.login-page__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.12;
+}
+
+.login-page__orb--1 {
+  width: 500px;
+  height: 500px;
+  background: var(--color-accent);
+  top: -150px;
+  right: -100px;
+  animation: fadeIn 2s var(--ease-out) both;
+}
+
+.login-page__orb--2 {
+  width: 400px;
+  height: 400px;
+  background: var(--color-coral);
+  bottom: -100px;
+  left: -100px;
+  animation: fadeIn 2s var(--ease-out) 0.3s both;
+}
+
+.login-page__orb--3 {
+  width: 300px;
+  height: 300px;
+  background: var(--color-violet);
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation: fadeIn 2s var(--ease-out) 0.6s both;
+}
+
+/* ---- Card ---- */
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  animation: fadeUp var(--duration-slow) var(--ease-out) both;
+}
+
+.login-card__header {
+  text-align: center;
+  margin-bottom: var(--space-8);
+}
+
+.login-card__logo {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: var(--space-3);
+}
+
+.login-card__title {
+  font-size: var(--text-3xl);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-coral));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: var(--space-2);
+}
+
+.login-card__subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.login-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.login-card__form .btn {
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.login-card__error {
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  text-align: center;
+  padding: var(--space-3);
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: var(--radius-sm);
+  animation: fadeUp var(--duration-fast) var(--ease-out) both;
+}
+
+.login-card__note {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  text-align: center;
+  margin-top: var(--space-6);
+  line-height: var(--leading-normal);
+}

@@ -1,0 +1,71 @@
+.tag-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.tag-input__container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-height: 44px;
+  align-items: center;
+  transition: all var(--duration-fast) var(--ease-out);
+  cursor: text;
+}
+
+.tag-input__container:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-muted);
+}
+
+.tag-input__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2) 2px var(--space-3);
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  max-width: 240px;
+  animation: scaleIn var(--duration-fast) var(--ease-spring) both;
+}
+
+.tag-input__chip-text {
+  max-width: 200px;
+}
+
+.tag-input__chip-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  font-size: 8px;
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.tag-input__chip-remove:hover {
+  background: var(--color-error);
+  color: white;
+}
+
+.tag-input__field {
+  flex: 1;
+  min-width: 120px;
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+  background: transparent;
+}
+
+.tag-input__field::placeholder {
+  color: var(--color-text-tertiary);
+}

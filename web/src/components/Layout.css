@@ -1,0 +1,371 @@
+/* ============================================================
+   Layout — Typographic Sidebar + Main Content Shell
+   A refined, icon-free editorial sidebar.
+   ============================================================ */
+
+.layout {
+  display: flex;
+  min-height: 100dvh;
+}
+
+.layout--exiting .sidebar {
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-6) 0;
+  z-index: var(--z-sidebar);
+  overflow-y: auto;
+  transition: opacity var(--duration-normal) var(--ease-out),
+              transform var(--duration-normal) var(--ease-out);
+}
+
+/* Subtle gradient overlay at the top of sidebar for depth */
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(
+    180deg,
+    rgba(232, 168, 56, 0.03) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ---- Brand / Wordmark ---- */
+.sidebar__brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  padding: 0 var(--space-5);
+  margin-bottom: var(--space-8);
+  text-decoration: none;
+  position: relative;
+}
+
+.sidebar__wordmark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2rem;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-coral));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.sidebar__wordmark-full {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--color-text);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  margin-left: 1px;
+  opacity: 0.35;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.sidebar__brand:hover .sidebar__wordmark-full {
+  opacity: 0.6;
+}
+
+/* ---- Navigation ---- */
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-3);
+  flex: 1;
+}
+
+.sidebar__link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: all var(--duration-fast) var(--ease-out);
+  animation: sidebarFadeIn var(--duration-slow) var(--ease-out) both;
+  animation-delay: calc(var(--nav-index) * 60ms + 100ms);
+}
+
+.sidebar__link-label {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-spring);
+}
+
+.sidebar__link-indicator {
+  width: 0;
+  height: 2px;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  transition: width var(--duration-normal) var(--ease-spring);
+}
+
+/* Hover state */
+.sidebar__link:hover .sidebar__link-label {
+  color: var(--color-text-secondary);
+  transform: translateX(2px);
+}
+
+.sidebar__link:hover .sidebar__link-indicator {
+  width: 12px;
+}
+
+/* Active state */
+.sidebar__link--active {
+  background: transparent;
+}
+
+.sidebar__link--active .sidebar__link-label {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.sidebar__link--active .sidebar__link-indicator {
+  width: 24px;
+  height: 2px;
+  background: var(--color-accent);
+}
+
+.sidebar__link--active:hover .sidebar__link-label {
+  transform: none;
+}
+
+/* Active accent bar on the left edge */
+.sidebar__link--active::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+  animation: accentBarIn var(--duration-normal) var(--ease-spring) both;
+}
+
+/* ---- Sidebar bottom ---- */
+.sidebar__bottom {
+  padding: var(--space-5) var(--space-5) 0;
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sidebar__logout {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+  text-align: left;
+  padding: var(--space-2) 0;
+  position: relative;
+  transition: color var(--duration-fast) var(--ease-out);
+  width: fit-content;
+}
+
+.sidebar__logout::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background: var(--color-coral);
+  transition: width var(--duration-normal) var(--ease-spring);
+}
+
+.sidebar__logout:hover {
+  color: var(--color-coral);
+}
+
+.sidebar__logout:hover::after {
+  width: 100%;
+}
+
+/* ---- Main Content ---- */
+.layout__main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  min-height: 100dvh;
+  padding: var(--space-6) var(--space-8) var(--space-16);
+  max-width: calc(var(--sidebar-width) + var(--content-max-width) + var(--space-16));
+}
+
+/* ---- Mobile bottom nav ---- */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-subtle);
+  z-index: var(--z-sidebar);
+  padding: var(--space-3) var(--space-6);
+  padding-bottom: env(safe-area-inset-bottom, var(--space-3));
+}
+
+.mobile-nav__link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2) var(--space-3);
+  text-decoration: none;
+  position: relative;
+}
+
+.mobile-nav__label {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.mobile-nav__link--active .mobile-nav__label {
+  color: var(--color-text);
+}
+
+.mobile-nav__link--active::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 2px;
+  background: var(--color-accent);
+  border-radius: var(--radius-full);
+}
+
+/* ---- Page header pattern ---- */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.page-header__left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.page-header__back {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-base);
+  transition: all var(--duration-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.page-header__back:hover {
+  background: var(--color-surface-overlay);
+  color: var(--color-text);
+}
+
+.page-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+}
+
+.page-subtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-1);
+}
+
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ---- Sidebar animations ---- */
+@keyframes sidebarFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes accentBarIn {
+  from {
+    opacity: 0;
+    height: 0;
+  }
+  to {
+    opacity: 1;
+    height: 20px;
+  }
+}
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
+
+  .mobile-nav {
+    display: flex;
+    justify-content: space-around;
+  }
+
+  .layout__main {
+    margin-left: 0;
+    padding: var(--space-5);
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-title {
+    font-size: var(--text-xl);
+  }
+}

@@ -1,0 +1,105 @@
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Sizes */
+.btn--sm {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  height: 32px;
+  border-radius: var(--radius-sm);
+}
+
+.btn--md {
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-sm);
+  height: 40px;
+}
+
+.btn--lg {
+  padding: var(--space-3) var(--space-8);
+  font-size: var(--text-base);
+  height: 48px;
+  border-radius: var(--radius-lg);
+}
+
+/* Variants */
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+}
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  box-shadow: var(--shadow-glow);
+  transform: translateY(-1px);
+}
+.btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn--secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.btn--secondary:hover:not(:disabled) {
+  background: var(--color-surface-overlay);
+  border-color: var(--color-text-tertiary);
+  transform: translateY(-1px);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-secondary);
+}
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.btn--danger {
+  background: transparent;
+  color: var(--color-error);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+.btn--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--color-error);
+}
+
+/* Loading spinner */
+.btn--loading {
+  pointer-events: none;
+}
+
+.btn__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-full);
+  animation: spin 0.6s linear infinite;
+}
+
+.btn__icon {
+  display: flex;
+  align-items: center;
+  font-size: 1.1em;
+}

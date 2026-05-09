@@ -1,0 +1,21 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/mangashelf-dev ./cmd/mangashelf"
+entrypoint = "./tmp/mangashelf-dev"
+delay = 1000
+exclude_dir = ["data", "tmp"]
+exclude_regex = ["_test.go"]
+include_dir = ["cmd", "db", "internal"]
+include_ext = ["go", "sql"]
+kill_delay = "500ms"
+log = "air-build.log"
+send_interrupt = true
+stop_on_error = true
+
+[log]
+time = true
+
+[misc]
+clean_on_exit = true
