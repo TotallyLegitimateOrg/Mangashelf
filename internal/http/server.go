@@ -41,11 +41,11 @@ type Server struct {
 
 func New(cfg config.Config, logger *slog.Logger, users *store.Store, authManager *auth.Manager) (*Server, error) {
 	var (
-		spaFS         fs.FS
-		extensionFS   fs.FS
-		versioning    []byte
-		extensionURL  *url.URL
-		err           error
+		spaFS        fs.FS
+		extensionFS  fs.FS
+		versioning   []byte
+		extensionURL *url.URL
+		err          error
 	)
 
 	if cfg.DevWebURL == "" {
@@ -89,6 +89,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/buildinfo", s.handleBuildInfo)
+	mux.Handle("GET /api/backup", s.requireAuth(s.handleBackup))
 	mux.HandleFunc("GET /api/auth/needs-setup", s.handleNeedsSetup)
 	mux.HandleFunc("POST /api/auth/setup", s.handleSetup)
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
@@ -168,6 +169,24 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleBuildInfo(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, buildinfo.Current())
+}
+
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
+	backup, err := s.store.ExportBackup(r.Context())
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="mangashelf-backup.json"`)
+	w.WriteHeader(http.StatusOK)
+
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(backup); err != nil {
+		s.writeError(w, err)
+	}
 }
 
 func (s *Server) handleNeedsSetup(w http.ResponseWriter, r *http.Request) {

@@ -237,6 +237,7 @@ export default function ViewsManagerPage() {
   );
   const paperbackRepoUrl =
     typeof window === "undefined" ? "/extensions/paperback" : `${window.location.origin}/extensions/paperback`;
+  const paperbackInstallUrl = `paperback://addRepo?displayName=Mangashelf&url=${encodeURI(paperbackRepoUrl)}`;
   const libraryById = useMemo(() => {
     return new Map(library.map((manga) => [manga.id, manga]));
   }, [library]);
@@ -670,7 +671,7 @@ export default function ViewsManagerPage() {
   };
 
   const installRepository = () => {
-    window.location.href = `paperback://addRepo?name=Mangashelf&url=${encodeURIComponent(paperbackRepoUrl)}`;
+    window.location.href = paperbackInstallUrl;
   };
 
   return (

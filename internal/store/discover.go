@@ -36,6 +36,26 @@ func (s *Store) ListDiscoverSections(ctx context.Context) ([]model.DiscoverSecti
 }
 
 func (s *Store) ListDiscoverSectionConfigs(ctx context.Context) ([]model.DiscoverSectionConfig, error) {
+	configs, err := s.listStoredDiscoverSectionConfigs(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]model.DiscoverSectionConfig, 0, len(configs))
+	for _, section := range configs {
+		if section.Mode == "live" && section.LiveRule != nil {
+			liveItems, err := s.liveDiscoverItems(ctx, section.Type, *section.LiveRule)
+			if err != nil {
+				return nil, err
+			}
+			section.Items = liveItems
+		}
+		result = append(result, section)
+	}
+	return result, nil
+}
+
+func (s *Store) listStoredDiscoverSectionConfigs(ctx context.Context) ([]model.DiscoverSectionConfig, error) {
 	sections, err := s.queries.ListDiscoverSections(ctx)
 	if err != nil {
 		return nil, err
@@ -97,12 +117,6 @@ func (s *Store) ListDiscoverSectionConfigs(ctx context.Context) ([]model.Discove
 		sectionItems := itemsBySection[section.ID]
 		if sectionItems == nil {
 			sectionItems = []model.DiscoverSectionItem{}
-		}
-		if section.Mode == "live" && liveRule != nil {
-			sectionItems, err = s.liveDiscoverItems(ctx, section.SectionType, *liveRule)
-			if err != nil {
-				return nil, err
-			}
 		}
 		result = append(result, model.DiscoverSectionConfig{
 			ID:        section.ID,
