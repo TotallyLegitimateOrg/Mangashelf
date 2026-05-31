@@ -2,14 +2,38 @@
   "name": "mangashelf",
   "private": true,
   "packageManager": "bun@1.3.13",
-  "workspaces": [
-    "web",
-    "extension"
-  ],
+  "type": "module",
   "scripts": {
-    "bootstrap": "bun install --frozen-lockfile",
-    "build:web": "cd web && bun run build",
-    "build:extension": "cd extension && bun run bundle",
-    "test:extension": "cd extension && bun run test"
+    "web:dev": "bun --cwd web vite",
+    "web:build": "bun --cwd web tsc -b && bun --cwd web vite build",
+    "web:preview": "bun --cwd web vite preview",
+    "extension:dev": "bun --cwd extension paperback-cli serve --watch",
+    "extension:bundle": "bun --cwd extension paperback-cli bundle",
+    "extension:serve": "bun --cwd extension paperback-cli serve",
+    "extension:logcat": "bun --cwd extension paperback-cli logcat",
+    "extension:lint": "bun --cwd extension oxlint --type-aware --fix",
+    "extension:lint:check": "bun --cwd extension oxlint --type-aware --deny-warnings",
+    "extension:format": "bun --cwd extension oxfmt src tsconfig.json package.json",
+    "extension:format:check": "bun --cwd extension oxfmt --check src tsconfig.json package.json",
+    "extension:typecheck": "bun --cwd extension tsc",
+    "extension:test:smoke": "bun test extension/src",
+    "extension:test": "bun run extension:typecheck && bun run extension:lint:check && bun run extension:format:check && bun run extension:test:smoke && bun run extension:bundle"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router": "^7.5.0"
+  },
+  "devDependencies": {
+    "@paperback/toolchain": "1.0.0-alpha.82",
+    "@paperback/types": "1.0.0-alpha.82",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "@vitejs/plugin-react": "^4.4.1",
+    "oxfmt": "^0.46.0",
+    "oxlint": "^1.61.0",
+    "oxlint-tsgolint": "^0.21.1",
+    "typescript": "^6.0.3",
+    "vite": "^6.3.3"
   }
 }

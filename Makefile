@@ -1,42 +1,41 @@
-SQLC_VERSION ?= v1.31.1
-AIR_VERSION ?= v1.65.1
-BUN ?= bun
 GO ?= go
-VERSION ?= dev
-COMMIT ?= unknown
-BUILT_AT ?= unknown
-BUILDINFO_PKG := github.com/TotallyLegitimateOrg/Mangashelf/internal/buildinfo
-LDFLAGS := -X $(BUILDINFO_PKG).Version=$(VERSION) -X $(BUILDINFO_PKG).Commit=$(COMMIT) -X $(BUILDINFO_PKG).BuiltAt=$(BUILT_AT)
+BUN ?= bun
+GORELEASER ?= goreleaser
 
-.PHONY: bootstrap sqlc build-web build-extension build dev run test clean
+BIN ?= ./bin/mangashelf
+TAG ?=
 
-bootstrap:
-	./scripts/bootstrap.sh
+.PHONY: build clean dev ensure-release-tag release test
 
-sqlc:
-	$(GO) run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
-
-build-web:
-	$(BUN) run build:web
-
-build-extension:
-	$(BUN) run build:extension
-
-build: bootstrap sqlc build-web build-extension
-	mkdir -p bin
-	$(GO) build -tags release -trimpath -ldflags '$(LDFLAGS)' -o ./bin/mangashelf ./cmd/mangashelf
-
-dev:
-	./scripts/dev.sh
-
-run: build
-	./bin/mangashelf
-
-test: bootstrap
-	$(GO) test ./...
-	$(BUN) run build:web
-	$(BUN) run test:extension
-
+build:
+	mkdir -p $(dir $(BIN))
+	$(GORELEASER) build --snapshot --clean --single-target --output $(BIN)
 
 clean:
-	rm -rf bin tmp web/dist extension/bundles web/tsconfig.app.tsbuildinfo
+	rm -rf ./bin ./dist ./tmp ./web/dist ./extension/bundles ./coverage.out ./*.tsbuildinfo ./web/*.tsbuildinfo ./extension/*.tsbuildinfo
+
+dev:
+	$(BUN) install; \
+	$(GO) tool air -c .air.toml & backend=$$!; \
+	$(BUN) run web:dev & frontend=$$!; \
+	$(BUN) run extension:dev & extension=$$!; \
+	trap 'kill $$backend $$frontend $$extension 2>/dev/null' INT TERM EXIT; \
+	wait
+
+release: ensure-release-tag
+	GITHUB_TOKEN="$$(printf 'url=%s\n\n' "$$(git remote get-url origin)" | git credential fill | sed -n 's/^password=//p')" \
+	GORELEASER_FORCE_TOKEN=github \
+	$(GORELEASER) release --clean
+
+ensure-release-tag:
+	@test -n "$(TAG)" || (echo "usage: make release TAG=v0.1.0" && exit 1)
+	@if git rev-parse -q --verify "refs/tags/$(TAG)" >/dev/null; then \
+		test "$$(git rev-list -n 1 "$(TAG)")" = "$$(git rev-parse HEAD)" || \
+			(echo "tag $(TAG) already exists but does not point at HEAD" && exit 1); \
+		echo "using existing tag $(TAG)"; \
+	else \
+		git tag -a "$(TAG)" -m "$(TAG)"; \
+	fi
+
+test:
+	$(GO) test ./...

@@ -1,0 +1,63 @@
+version: 2
+
+project_name: mangashelf
+
+before:
+  hooks:
+    - go tool sqlc generate -f sqlc.yaml
+    - bun install --frozen-lockfile
+    - bun run web:build
+    - bun run extension:bundle
+
+builds:
+  - id: mangashelf
+    main: ./cmd/mangashelf
+    binary: mangashelf
+    tags:
+      - release
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - >-
+        -s -w
+        -X github.com/TotallyLegitimateOrg/Mangashelf/internal/buildinfo.Version={{ .Tag }}
+        -X github.com/TotallyLegitimateOrg/Mangashelf/internal/buildinfo.Commit={{ .Commit }}
+        -X github.com/TotallyLegitimateOrg/Mangashelf/internal/buildinfo.BuiltAt={{ .Date }}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: darwin
+        goarch: amd64
+
+archives:
+  - id: mangashelf
+    ids:
+      - mangashelf
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    formats: ["tar.gz"]
+    format_overrides:
+      - goos: windows
+        formats: ["zip"]
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
