@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/auth"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/config"
@@ -53,6 +55,12 @@ func TestBackupEndpointReturnsJSONAttachment(t *testing.T) {
 
 	if !bytes.Equal(firstBody, secondBody) {
 		t.Fatalf("backup responses differ across repeated requests\nfirst:  %s\nsecond: %s", firstBody, secondBody)
+	}
+	if !bytes.Contains(firstBody, []byte("\n  \"schemaVersion\":")) {
+		t.Fatalf("backup response is not indented JSON: %s", firstBody)
+	}
+	if !bytes.HasSuffix(firstBody, []byte("\n")) {
+		t.Fatalf("backup response should end with a newline")
 	}
 
 	var raw map[string]json.RawMessage
@@ -217,8 +225,10 @@ func requestBackup(t *testing.T, server *Server, apiKey string) []byte {
 	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Fatalf("Content-Type = %q, want %q", got, "application/json; charset=utf-8")
 	}
-	if got := rec.Header().Get("Content-Disposition"); got != `attachment; filename="mangashelf-backup.json"` {
-		t.Fatalf("Content-Disposition = %q, want %q", got, `attachment; filename="mangashelf-backup.json"`)
+	wantFilename := "mangashelf-backup-" + time.Now().UTC().Format(time.DateOnly) + ".json"
+	wantDisposition := fmt.Sprintf(`attachment; filename="%s"`, wantFilename)
+	if got := rec.Header().Get("Content-Disposition"); got != wantDisposition {
+		t.Fatalf("Content-Disposition = %q, want %q", got, wantDisposition)
 	}
 
 	return rec.Body.Bytes()

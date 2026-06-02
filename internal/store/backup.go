@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Store) ExportBackup(ctx context.Context) (*model.Backup, error) {
-	manga, err := s.SearchManga(ctx, model.MangaSearchOptions{})
+	manga, err := s.SearchManga(ctx, model.MangaSearchOptions{Sort: "title_asc"})
 	if err != nil {
 		return nil, fmt.Errorf("list manga for backup: %w", err)
 	}

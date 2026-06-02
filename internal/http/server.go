@@ -181,11 +181,13 @@ func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request, _ *s
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="mangashelf-backup.json"`)
+	filename := fmt.Sprintf("mangashelf-backup-%s.json", time.Now().UTC().Format(time.DateOnly))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.WriteHeader(http.StatusOK)
 
 	encoder := json.NewEncoder(w)
 	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(backup); err != nil {
 		s.writeError(w, err)
 	}

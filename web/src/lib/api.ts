@@ -167,6 +167,19 @@ function parseApiErrorMessage(status: number, responseText: string): string {
   return message;
 }
 
+function backupFilenameFallback(): string {
+  return `mangashelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+}
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+
+  const match = header.match(/(?:^|;)\s*filename="([^"]+)"/i)
+    ?? header.match(/(?:^|;)\s*filename=([^;]+)/i);
+  const filename = match?.[1]?.trim();
+  return filename || null;
+}
+
 /* ---- Auth ---- */
 
 export async function checkNeedsSetup(): Promise<boolean> {
@@ -249,7 +262,8 @@ export async function downloadBackup(): Promise<void> {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `mangashelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = filenameFromContentDisposition(res.headers.get("Content-Disposition"))
+    ?? backupFilenameFallback();
   document.body.appendChild(link);
   link.click();
   link.remove();
