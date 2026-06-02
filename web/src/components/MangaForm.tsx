@@ -41,7 +41,7 @@ export function MangaForm({ initial, onSubmit, formId }: MangaFormProps) {
       setForm(payload);
       toast("Imported metadata from AniList!", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "AniList import failed", "error");
+      toast(api.errorMessage(err, "Failed to import AniList metadata"), "error");
     } finally {
       setImportLoading(false);
     }

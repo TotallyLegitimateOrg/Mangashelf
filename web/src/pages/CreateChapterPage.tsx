@@ -619,7 +619,7 @@ export default function CreateChapterPage() {
     } catch (err) {
       setUploadProgress(null);
       toast(
-        err instanceof Error ? err.message : "Failed to create chapter",
+        api.errorMessage(err, "Failed to create chapter"),
         "error"
       );
     } finally {

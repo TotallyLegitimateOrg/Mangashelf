@@ -59,4 +59,5 @@
 .toast__message {
   flex: 1;
   line-height: var(--leading-snug);
+  overflow-wrap: anywhere;
 }

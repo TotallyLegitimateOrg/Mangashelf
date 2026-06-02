@@ -21,8 +21,8 @@ export default function EditMangaPage() {
     if (!id) return;
     api.getManga(id)
       .then(setManga)
-      .catch(() => {
-        toast("Manga not found", "error");
+      .catch((err) => {
+        toast(api.errorMessage(err, "Failed to load manga for editing"), "error");
         navigate("/");
       })
       .finally(() => setLoading(false));
@@ -54,7 +54,7 @@ export default function EditMangaPage() {
       toast("Manga updated!", "success");
       navigate(`/manga/${manga.id}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to update", "error");
+      toast(api.errorMessage(err, "Failed to update manga"), "error");
     } finally {
       setSaving(false);
     }
@@ -66,7 +66,7 @@ export default function EditMangaPage() {
       toast("Manga deleted", "success");
       navigate("/");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete", "error");
+      toast(api.errorMessage(err, "Failed to delete manga"), "error");
     }
   };
 

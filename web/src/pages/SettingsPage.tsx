@@ -49,14 +49,12 @@ export default function SettingsPage() {
         setBuildInfo(buildInfoResult.value);
       } else {
         toast(
-          buildInfoResult.reason instanceof Error
-            ? buildInfoResult.reason.message
-            : "Failed to load app version",
+          api.errorMessage(buildInfoResult.reason, "Failed to load app version"),
           "error"
         );
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to load settings", "error");
+      toast(api.errorMessage(err, "Failed to load settings"), "error");
     } finally {
       setLoading(false);
     }
@@ -74,7 +72,7 @@ export default function SettingsPage() {
       setNewKeyName("");
       fetchKeys();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to create key", "error");
+      toast(api.errorMessage(err, "Failed to create API key"), "error");
     } finally {
       setCreating(false);
     }
@@ -88,7 +86,7 @@ export default function SettingsPage() {
       setDeleteTarget(null);
       fetchKeys();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete key", "error");
+      toast(api.errorMessage(err, "Failed to delete API key"), "error");
     }
   };
 
@@ -105,7 +103,7 @@ export default function SettingsPage() {
       await api.downloadBackup();
       toast("Backup downloaded", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to download backup", "error");
+      toast(api.errorMessage(err, "Failed to download backup"), "error");
     } finally {
       setDownloadingBackup(false);
     }
@@ -125,7 +123,7 @@ export default function SettingsPage() {
         restoreInputRef.current.value = "";
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to restore backup", "error");
+      toast(api.errorMessage(err, "Failed to restore backup"), "error");
     } finally {
       setRestoringBackup(false);
     }

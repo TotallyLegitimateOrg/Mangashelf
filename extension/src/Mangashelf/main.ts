@@ -241,14 +241,30 @@ export class MangashelfExtension implements ExtensionImpl<typeof config> {
     return this.settingsForm.apiKey.value;
   }
 
+  private apiErrorMessage(status: number, method: string, url: string, responseText: string): string {
+    let message = responseText.trim();
+    if (message) {
+      try {
+        const parsed = JSON.parse(message) as { error?: string };
+        message = parsed.error || message;
+      } catch {
+        // Non-JSON responses are still useful when diagnosing proxy or server issues.
+      }
+    }
+    return message
+      ? `API request failed: ${status} ${method} ${url}: ${message}`
+      : `API request failed: ${status} ${method} ${url}`;
+  }
+
   private async apiRequest<T>(path: string, method = "GET", body?: unknown): Promise<T> {
     const baseUrl = this.getBaseUrl();
     if (!baseUrl) {
       throw new Error("Server URL not configured. Go to Settings to set it up.");
     }
 
+    const url = `${baseUrl}/api${path}`;
     const request: import("@paperback/types").Request = {
-      url: `${baseUrl}/api${path}`,
+      url,
       method,
       headers: {
         Authorization: `Bearer ${this.getApiKey()}`,
@@ -257,14 +273,26 @@ export class MangashelfExtension implements ExtensionImpl<typeof config> {
       body: body === undefined ? undefined : JSON.stringify(body),
     };
 
-    const [response, data] = await Application.scheduleRequest(request);
+    let response: { status: number };
+    let data: ArrayBuffer;
+    try {
+      [response, data] = await Application.scheduleRequest(request);
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim() ? `: ${error.message}` : "";
+      throw new Error(`Network request failed for ${method} ${url}${message}`);
+    }
+    const jsonString = Application.arrayBufferToUTF8String(data);
 
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`API request failed: ${response.status}`);
+      throw new Error(this.apiErrorMessage(response.status, method, url, jsonString));
     }
 
-    const jsonString = Application.arrayBufferToUTF8String(data);
-    return JSON.parse(jsonString) as T;
+    try {
+      return JSON.parse(jsonString) as T;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid JSON";
+      throw new Error(`API response was not valid JSON for ${method} ${url}: ${message}`);
+    }
   }
 
   async initialise(): Promise<void> {

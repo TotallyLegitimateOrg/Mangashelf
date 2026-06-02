@@ -102,14 +102,19 @@ describe("MangashelfExtension search", () => {
   });
 
   it("throws a visible error when the search request fails", async () => {
-    const extension = createExtension(createApplicationStub({ responseStatus: 401 }));
+    const extension = createExtension(createApplicationStub({
+      responseStatus: 401,
+      responseBody: { error: "Invalid or expired token" },
+    }));
 
     await expect(
       extension.getSearchResults({
         title: "alpha",
         metadata: undefined,
       }),
-    ).rejects.toThrow("Search failed: API request failed: 401");
+    ).rejects.toThrow(
+      "Search failed: API request failed: 401 GET http://localhost:8080/api/manga?q=alpha: Invalid or expired token",
+    );
   });
 
   it("computes a chapter title when the API returns a blank one", async () => {

@@ -45,6 +45,14 @@ const SECTION_TYPE_DESCRIPTIONS: Record<string, string> = {
   genres: "Search shortcuts that open filtered Paperback results.",
 };
 
+async function loadViewsPart<T>(label: string, load: Promise<T>): Promise<T> {
+  try {
+    return await load;
+  } catch (err) {
+    throw new Error(`Failed to load ${label}: ${api.errorMessage(err, "Unknown error")}`);
+  }
+}
+
 const LIVE_PRESET_OPTIONS: Record<string, { value: string; label: string }[]> = {
   featured: [
     { value: "title_asc", label: "Title A-Z" },
@@ -288,9 +296,9 @@ export default function ViewsManagerPage() {
     setLoading(true);
     try {
       const [sectionData, collectionData, libraryData] = await Promise.all([
-        api.listDiscoverSections(),
-        api.listCollections(),
-        api.listManga({ sort: "title_asc" }),
+        loadViewsPart("discover sections", api.listDiscoverSections()),
+        loadViewsPart("collections", api.listCollections()),
+        loadViewsPart("library titles", api.listManga({ sort: "title_asc" })),
       ]);
       const safeCollections = Array.isArray(collectionData) ? collectionData : [];
       setSections(Array.isArray(sectionData) ? sectionData : []);
@@ -298,7 +306,7 @@ export default function ViewsManagerPage() {
       setLibrary(Array.isArray(libraryData) ? libraryData : []);
       setSelectedCollectionId((current) => current ?? safeCollections[0]?.id ?? null);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to load Paperback settings", "error");
+      toast(api.errorMessage(err, "Failed to load Paperback settings"), "error");
     } finally {
       setLoading(false);
     }
@@ -308,7 +316,7 @@ export default function ViewsManagerPage() {
     try {
       setExtensionMetadata(await api.getExtensionMetadata());
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to load extension metadata", "error");
+      toast(api.errorMessage(err, "Failed to load extension metadata"), "error");
     }
   }, [toast]);
 
@@ -322,7 +330,7 @@ export default function ViewsManagerPage() {
       const data = await api.listCollectionManga(selectedCollectionId);
       setCollectionManga(Array.isArray(data) ? data : []);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to load collection manga", "error");
+      toast(api.errorMessage(err, "Failed to load collection manga"), "error");
     } finally {
       setCollectionLoading(false);
     }
@@ -460,7 +468,7 @@ export default function ViewsManagerPage() {
       setShowForm(false);
       fetchSections();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save", "error");
+      toast(api.errorMessage(err, "Failed to save discover section"), "error");
     } finally {
       setSaving(false);
     }
@@ -474,7 +482,7 @@ export default function ViewsManagerPage() {
       setDeleteTarget(null);
       fetchSections();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete", "error");
+      toast(api.errorMessage(err, "Failed to delete discover section"), "error");
     }
   };
 
@@ -493,7 +501,7 @@ export default function ViewsManagerPage() {
       toast("Order saved", "success");
       setOrderChanged(false);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save order", "error");
+      toast(api.errorMessage(err, "Failed to save discover section order"), "error");
     }
   };
 
@@ -523,7 +531,7 @@ export default function ViewsManagerPage() {
       await fetchCollections();
       toast(editingCollection ? "Collection renamed" : "Collection created", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save collection", "error");
+      toast(api.errorMessage(err, "Failed to save collection"), "error");
     }
   };
 
@@ -536,7 +544,7 @@ export default function ViewsManagerPage() {
       await fetchCollections();
       toast("Collection deleted", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete collection", "error");
+      toast(api.errorMessage(err, "Failed to delete collection"), "error");
     }
   };
 
@@ -550,7 +558,7 @@ export default function ViewsManagerPage() {
       });
       await Promise.all([fetchCollectionManga(), fetchCollections()]);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to update collection", "error");
+      toast(api.errorMessage(err, "Failed to update collection"), "error");
     }
   };
 
@@ -563,7 +571,7 @@ export default function ViewsManagerPage() {
     try {
       await api.reorderCollections(next.map((collection) => collection.id));
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to reorder collections", "error");
+      toast(api.errorMessage(err, "Failed to reorder collections"), "error");
       fetchCollections();
     }
   };

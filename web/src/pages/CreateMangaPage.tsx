@@ -19,7 +19,7 @@ export default function CreateMangaPage() {
       toast("Manga created!", "success");
       navigate(`/manga/${manga.id}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to create manga", "error");
+      toast(api.errorMessage(err, "Failed to create manga"), "error");
     } finally {
       setSaving(false);
     }

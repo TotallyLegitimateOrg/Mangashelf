@@ -48,7 +48,7 @@ export default function LoginPage() {
       toast(needsSetup ? "Account created! Welcome." : "Welcome back!", "success");
       navigate("/", { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(api.errorMessage(err, "Failed to sign in"));
     } finally {
       setLoading(false);
     }

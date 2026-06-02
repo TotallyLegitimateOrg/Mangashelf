@@ -40,8 +40,8 @@ export default function EditChapterPage() {
           pages: ch.pages,
         });
       })
-      .catch(() => {
-        toast("Chapter not found", "error");
+      .catch((err) => {
+        toast(api.errorMessage(err, "Failed to load chapter for editing"), "error");
         navigate(`/manga/${mangaId}`);
       })
       .finally(() => setLoading(false));
@@ -64,7 +64,7 @@ export default function EditChapterPage() {
       toast("Chapter updated!", "success");
       navigate(`/manga/${mangaId}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to update", "error");
+      toast(api.errorMessage(err, "Failed to update chapter"), "error");
     } finally {
       setSaving(false);
     }
@@ -77,7 +77,7 @@ export default function EditChapterPage() {
       toast("Chapter deleted", "success");
       navigate(`/manga/${mangaId}`);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete", "error");
+      toast(api.errorMessage(err, "Failed to delete chapter"), "error");
     }
   };
 

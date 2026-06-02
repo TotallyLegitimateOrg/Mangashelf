@@ -41,7 +41,7 @@ export default function LibraryPage() {
       });
       setManga(items);
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to load library", "error");
+      toast(api.errorMessage(err, "Failed to load library"), "error");
     } finally {
       setLoading(false);
     }

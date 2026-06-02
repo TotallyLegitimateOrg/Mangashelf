@@ -39,13 +39,33 @@ export function clearStoredToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  method?: string;
+  path?: string;
+
+  constructor(message: string, status: number, request?: { method?: string; path?: string }) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.method = request?.method;
+    this.path = request?.path;
   }
+}
+
+export function errorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const details = [
+      err.status > 0 ? String(err.status) : null,
+      err.method,
+      err.path,
+    ].filter(Boolean);
+    return details.length > 0 ? `${err.message} (${details.join(" ")})` : err.message;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
 }
 
 async function request<T>(
@@ -59,24 +79,35 @@ async function request<T>(
   if (token) headers["Authorization"] = `Bearer ${token}`;
   if (body && !opts?.raw) headers["Content-Type"] = "application/json";
 
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: opts?.raw ? (body as BodyInit) : body ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      body: opts?.raw ? (body as BodyInit) : body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    const reason = err instanceof Error && err.message.trim() ? `: ${err.message}` : "";
+    throw new ApiError(`Network request failed${reason}`, 0, { method, path });
+  }
 
   if (!res.ok) {
-    let message = `Request failed (${res.status})`;
+    let message = res.statusText ? `Request failed: ${res.statusText}` : "Request failed";
     try {
       const err = (await res.json()) as { error?: string };
       if (err.error) message = err.error;
     } catch {
       /* ignore parse errors */
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, { method, path });
   }
 
-  return res.json() as Promise<T>;
+  try {
+    return await res.json() as T;
+  } catch (err) {
+    const reason = err instanceof Error && err.message.trim() ? `: ${err.message}` : "";
+    throw new ApiError(`Response was not valid JSON${reason}`, res.status, { method, path });
+  }
 }
 
 export type UploadChapterProgressPhase =
@@ -196,10 +227,22 @@ export async function downloadBackup(): Promise<void> {
   const token = getStoredToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch("/api/backups/export", { method: "GET", headers });
+  let res: Response;
+  try {
+    res = await fetch("/api/backups/export", { method: "GET", headers });
+  } catch (err) {
+    const reason = err instanceof Error && err.message.trim() ? `: ${err.message}` : "";
+    throw new ApiError(`Network request failed${reason}`, 0, {
+      method: "GET",
+      path: "/api/backups/export",
+    });
+  }
   if (!res.ok) {
     const text = await res.text();
-    throw new ApiError(parseApiErrorMessage(res.status, text), res.status);
+    throw new ApiError(parseApiErrorMessage(res.status, text), res.status, {
+      method: "GET",
+      path: "/api/backups/export",
+    });
   }
 
   const blob = await res.blob();
@@ -444,7 +487,10 @@ export async function uploadChapter(
     };
 
     xhr.onerror = () => {
-      reject(new ApiError("Network request failed", xhr.status || 0));
+      reject(new ApiError("Network request failed", xhr.status || 0, {
+        method: "POST",
+        path: `/api/manga/${mangaId}/chapters/upload`,
+      }));
     };
 
     xhr.onload = () => {
@@ -463,11 +509,17 @@ export async function uploadChapter(
       }
 
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new ApiError(parseApiErrorMessage(xhr.status, xhr.responseText), xhr.status));
+        reject(new ApiError(parseApiErrorMessage(xhr.status, xhr.responseText), xhr.status, {
+          method: "POST",
+          path: `/api/manga/${mangaId}/chapters/upload`,
+        }));
         return;
       }
       if (streamedError) {
-        reject(new ApiError(streamedError, xhr.status));
+        reject(new ApiError(streamedError, xhr.status, {
+          method: "POST",
+          path: `/api/manga/${mangaId}/chapters/upload`,
+        }));
         return;
       }
       if (completedChapter) {
@@ -478,7 +530,10 @@ export async function uploadChapter(
       try {
         resolve(JSON.parse(xhr.responseText) as ChapterDetail);
       } catch {
-        reject(new ApiError("Upload completed without a chapter response", xhr.status));
+        reject(new ApiError("Upload completed without a chapter response", xhr.status, {
+          method: "POST",
+          path: `/api/manga/${mangaId}/chapters/upload`,
+        }));
       }
     };
 

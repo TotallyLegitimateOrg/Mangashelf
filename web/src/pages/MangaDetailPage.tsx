@@ -130,6 +130,14 @@ function groupSyncLogsBySource(entries: ChapterSourceSyncLog[]): Map<string, Syn
   return grouped;
 }
 
+async function loadDetailPart<T>(label: string, load: Promise<T>): Promise<T> {
+  try {
+    return await load;
+  } catch (err) {
+    throw new Error(`Failed to load ${label}: ${api.errorMessage(err, "Unknown error")}`);
+  }
+}
+
 export default function MangaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -174,16 +182,16 @@ export default function MangaDetailPage() {
     if (!id) return;
     try {
       const [m, c, sourceData] = await Promise.all([
-        api.getManga(id),
-        api.listChapters(id),
-        api.listChapterSources(id),
+        loadDetailPart("manga details", api.getManga(id)),
+        loadDetailPart("chapters", api.listChapters(id)),
+        loadDetailPart("chapter sources", api.listChapterSources(id)),
       ]);
       setManga(m);
       setChapters(c);
       setSources(sourceData.sources);
       setSyncLogs(sourceData.syncLogs);
-    } catch {
-      toast("Failed to load manga", "error");
+    } catch (err) {
+      toast(api.errorMessage(err, "Failed to load manga"), "error");
       navigate("/");
     } finally {
       setLoading(false);
@@ -313,7 +321,7 @@ export default function MangaDetailPage() {
       setReorderedChapters(null);
       fetchAll();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to save order", "error");
+      toast(api.errorMessage(err, "Failed to save chapter order"), "error");
     } finally {
       setSavingOrder(false);
     }
@@ -329,7 +337,7 @@ export default function MangaDetailPage() {
       setReorderedChapters(null);
       fetchAll();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to reset order", "error");
+      toast(api.errorMessage(err, "Failed to reset chapter order"), "error");
     } finally {
       setSavingOrder(false);
     }
@@ -348,7 +356,7 @@ export default function MangaDetailPage() {
       toast(message, "success");
       fetchAll();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Sync failed";
+      const message = api.errorMessage(err, "Failed to sync chapter source");
       toast(message, "error");
       fetchAll();
     } finally {
@@ -364,7 +372,7 @@ export default function MangaDetailPage() {
       setDeleteChapter(null);
       fetchAll();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to delete chapter", "error");
+      toast(api.errorMessage(err, "Failed to delete chapter"), "error");
     }
   };
 
@@ -391,7 +399,7 @@ export default function MangaDetailPage() {
       toast(`Updated ${result.updatedCount} chapter${result.updatedCount !== 1 ? "s" : ""}`, "success");
       fetchAll();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update chapters";
+      const message = api.errorMessage(err, "Failed to update chapters");
       setBulkMetadataError(message);
       toast(message, "error");
     } finally {
@@ -407,7 +415,7 @@ export default function MangaDetailPage() {
       setUnlinkSourceId(null);
       fetchAll();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to unlink source", "error");
+      toast(api.errorMessage(err, "Failed to unlink source"), "error");
     }
   };
 
@@ -424,7 +432,7 @@ export default function MangaDetailPage() {
       });
       toast("Sync activity cleared", "success");
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to clear sync activity", "error");
+      toast(api.errorMessage(err, "Failed to clear sync activity"), "error");
     } finally {
       setClearingLogsSourceId(null);
     }
