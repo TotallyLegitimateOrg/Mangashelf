@@ -187,32 +187,6 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Backup and restore */}
-      <div className="settings-section">
-        <h2 className="settings-section__title font-display">Backup & Restore</h2>
-        <div className="settings-backup-actions">
-          <Button onClick={handleDownloadBackup} loading={downloadingBackup}>
-            Download Backup
-          </Button>
-          <input
-            ref={restoreInputRef}
-            className="settings-restore__input"
-            type="file"
-            accept="application/json,.json"
-            disabled={restoringBackup}
-            onChange={(event) => handleRestoreFileSelected(event.target.files?.[0] ?? null)}
-          />
-          <Button
-            type="button"
-            variant="danger"
-            loading={restoringBackup}
-            onClick={handleSelectRestoreFile}
-          >
-            Restore Backup
-          </Button>
-        </div>
-      </div>
-
       {/* API Keys */}
       <div className="settings-section">
         <div className="settings-section__header">
@@ -250,6 +224,51 @@ export default function SettingsPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Backup and restore */}
+      <div className="settings-section">
+        <h2 className="settings-section__title font-display">Backup & Restore</h2>
+        <div className="settings-card settings-backup-card">
+          <div className="settings-backup-row">
+            <div className="settings-backup-row__main">
+              <span className="settings-backup-row__icon" aria-hidden="true">↓</span>
+              <div className="settings-backup-row__copy">
+                <span className="settings-backup-row__title">Export Library</span>
+                <span className="settings-backup-row__detail">JSON backup</span>
+              </div>
+            </div>
+            <Button size="sm" onClick={handleDownloadBackup} loading={downloadingBackup}>
+              Download
+            </Button>
+          </div>
+          <div className="settings-backup-row settings-backup-row--restore">
+            <div className="settings-backup-row__main">
+              <span className="settings-backup-row__icon settings-backup-row__icon--danger" aria-hidden="true">↺</span>
+              <div className="settings-backup-row__copy">
+                <span className="settings-backup-row__title">Restore Library</span>
+                <span className="settings-backup-row__detail">Replace current data</span>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              type="button"
+              variant="danger"
+              loading={restoringBackup}
+              onClick={handleSelectRestoreFile}
+            >
+              Restore
+            </Button>
+          </div>
+          <input
+            ref={restoreInputRef}
+            className="settings-restore__input"
+            type="file"
+            accept="application/json,.json"
+            disabled={restoringBackup}
+            onChange={(event) => handleRestoreFileSelected(event.target.files?.[0] ?? null)}
+          />
+        </div>
       </div>
 
       {/* Create key modal */}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/db/gen"
@@ -36,6 +37,7 @@ func (s *Store) SearchManga(ctx context.Context, options model.MangaSearchOption
 	if err != nil {
 		return nil, fmt.Errorf("build manga list: %w", err)
 	}
+	sortMangaByAdjustedChapterCount(items, sortOption)
 	return items, nil
 }
 
@@ -159,6 +161,10 @@ func (s *Store) loadManga(ctx context.Context, id string) (*model.Manga, error) 
 	if err != nil {
 		return nil, err
 	}
+	proxyCounts, err := s.proxyChapterCountAdjustments(ctx, []string{id})
+	if err != nil {
+		return nil, err
+	}
 
 	secondaryTitles := make([]string, 0, len(titles))
 	for _, title := range titles {
@@ -210,7 +216,7 @@ func (s *Store) loadManga(ctx context.Context, id string) (*model.Manga, error) 
 		ArtworkURLs:     artworkURLs,
 		TagGroups:       tagGroups,
 		AdditionalInfo:  additionalInfo,
-		ChapterCount:    len(chapters),
+		ChapterCount:    len(chapters) + proxyCounts[id],
 		CreatedAt:       isoString(record.CreatedAt),
 		UpdatedAt:       isoString(record.UpdatedAt),
 	}, nil
@@ -318,6 +324,15 @@ func (s *Store) buildMangaList(ctx context.Context, rows []gen.SearchMangaSummar
 			UpdatedAt:       isoString(row.UpdatedAt),
 		})
 	}
+	proxyCounts, err := s.proxyChapterCountAdjustments(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("list proxy chapter counts: %w", err)
+	}
+	for id, count := range proxyCounts {
+		if index, ok := indexByID[id]; ok {
+			result[index].ChapterCount += count
+		}
+	}
 
 	titles, err := s.queries.ListMangaTitlesByMangaIDs(ctx, ids)
 	if err != nil {
@@ -381,6 +396,52 @@ func (s *Store) buildMangaList(ctx context.Context, rows []gen.SearchMangaSummar
 	}
 
 	return result, nil
+}
+
+func (s *Store) proxyChapterCountAdjustments(ctx context.Context, mangaIDs []string) (map[string]int, error) {
+	if len(mangaIDs) == 0 {
+		return map[string]int{}, nil
+	}
+	rows, err := s.queries.ListProxyChapterCountAdjustments(ctx, mangaIDs)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]int, len(rows))
+	for _, row := range rows {
+		if row.ProxyChapterCount.Valid {
+			result[row.MangaID] = int(row.ProxyChapterCount.Float64)
+		}
+	}
+	return result, nil
+}
+
+func sortMangaByAdjustedChapterCount(items []model.Manga, sortOption string) {
+	switch sortOption {
+	case "chapters_asc":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].ChapterCount != items[j].ChapterCount {
+				return items[i].ChapterCount < items[j].ChapterCount
+			}
+			leftTitle := strings.ToLower(items[i].PrimaryTitle)
+			rightTitle := strings.ToLower(items[j].PrimaryTitle)
+			if leftTitle != rightTitle {
+				return leftTitle < rightTitle
+			}
+			return items[i].ID < items[j].ID
+		})
+	case "chapters_desc":
+		sort.SliceStable(items, func(i, j int) bool {
+			if items[i].ChapterCount != items[j].ChapterCount {
+				return items[i].ChapterCount > items[j].ChapterCount
+			}
+			leftTitle := strings.ToLower(items[i].PrimaryTitle)
+			rightTitle := strings.ToLower(items[j].PrimaryTitle)
+			if leftTitle != rightTitle {
+				return leftTitle < rightTitle
+			}
+			return items[i].ID < items[j].ID
+		})
+	}
 }
 
 func jsonArrayOrNil(values []string) any {

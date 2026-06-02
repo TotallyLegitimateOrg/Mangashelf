@@ -8,6 +8,7 @@ package gen
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const clearChapterSortingIndices = `-- name: ClearChapterSortingIndices :exec
@@ -611,6 +612,70 @@ func (q *Queries) ListChapterSources(ctx context.Context, mangaID string) ([]Cha
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProxyChapterCountAdjustments = `-- name: ListProxyChapterCountAdjustments :many
+SELECT
+  cs.manga_id,
+  SUM(
+    CASE
+      WHEN COALESCE(cs.last_seen_chapter_count, 0) - (
+        SELECT COUNT(*)
+        FROM chapters c
+        WHERE c.manga_id = cs.manga_id
+          AND c.origin_source_id = cs.id
+      ) > 0 THEN COALESCE(cs.last_seen_chapter_count, 0) - (
+        SELECT COUNT(*)
+        FROM chapters c
+        WHERE c.manga_id = cs.manga_id
+          AND c.origin_source_id = cs.id
+      )
+      ELSE 0
+    END
+  ) AS proxy_chapter_count
+FROM chapter_sources cs
+WHERE cs.manga_id IN (/*SLICE:manga_ids*/?)
+  AND cs.mode = 'proxy'
+  AND cs.status = 'ready'
+GROUP BY cs.manga_id
+`
+
+type ListProxyChapterCountAdjustmentsRow struct {
+	MangaID           string
+	ProxyChapterCount sql.NullFloat64
+}
+
+func (q *Queries) ListProxyChapterCountAdjustments(ctx context.Context, mangaIds []string) ([]ListProxyChapterCountAdjustmentsRow, error) {
+	query := listProxyChapterCountAdjustments
+	var queryParams []interface{}
+	if len(mangaIds) > 0 {
+		for _, v := range mangaIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:manga_ids*/?", strings.Repeat(",?", len(mangaIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:manga_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProxyChapterCountAdjustmentsRow{}
+	for rows.Next() {
+		var i ListProxyChapterCountAdjustmentsRow
+		if err := rows.Scan(&i.MangaID, &i.ProxyChapterCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

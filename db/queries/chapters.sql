@@ -173,6 +173,31 @@ FROM chapter_sources
 WHERE manga_id = ?
 ORDER BY created_at DESC;
 
+-- name: ListProxyChapterCountAdjustments :many
+SELECT
+  cs.manga_id,
+  SUM(
+    CASE
+      WHEN COALESCE(cs.last_seen_chapter_count, 0) - (
+        SELECT COUNT(*)
+        FROM chapters c
+        WHERE c.manga_id = cs.manga_id
+          AND c.origin_source_id = cs.id
+      ) > 0 THEN COALESCE(cs.last_seen_chapter_count, 0) - (
+        SELECT COUNT(*)
+        FROM chapters c
+        WHERE c.manga_id = cs.manga_id
+          AND c.origin_source_id = cs.id
+      )
+      ELSE 0
+    END
+  ) AS proxy_chapter_count
+FROM chapter_sources cs
+WHERE cs.manga_id IN (sqlc.slice('manga_ids'))
+  AND cs.mode = 'proxy'
+  AND cs.status = 'ready'
+GROUP BY cs.manga_id;
+
 -- name: GetChapterSourceByID :one
 SELECT
   id,

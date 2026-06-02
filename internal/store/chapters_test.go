@@ -60,6 +60,20 @@ func TestProxySourceListsAndFetchesLiveChapters(t *testing.T) {
 	if chapters[0].Origin.Provider == nil || *chapters[0].Origin.Provider != "cubari" {
 		t.Fatalf("proxy chapter origin provider = %v, want cubari", chapters[0].Origin.Provider)
 	}
+	reloadedManga, err := store.GetManga(ctx, manga.ID)
+	if err != nil {
+		t.Fatalf("GetManga returned error: %v", err)
+	}
+	if reloadedManga.ChapterCount != 2 {
+		t.Fatalf("GetManga chapter count = %d, want 2 proxy chapters", reloadedManga.ChapterCount)
+	}
+	mangaList, err := store.SearchManga(ctx, model.MangaSearchOptions{})
+	if err != nil {
+		t.Fatalf("SearchManga returned error: %v", err)
+	}
+	if got := mangaByID(t, mangaList, manga.ID).ChapterCount; got != 2 {
+		t.Fatalf("SearchManga chapter count = %d, want 2 proxy chapters", got)
+	}
 
 	detail, err := store.GetChapter(ctx, manga.ID, chapters[0].ID)
 	if err != nil {
@@ -71,6 +85,17 @@ func TestProxySourceListsAndFetchesLiveChapters(t *testing.T) {
 	if len(detail.Pages) == 0 {
 		t.Fatalf("GetChapter returned no pages")
 	}
+}
+
+func mangaByID(t *testing.T, items []model.Manga, id string) model.Manga {
+	t.Helper()
+	for _, item := range items {
+		if item.ID == id {
+			return item
+		}
+	}
+	t.Fatalf("manga %s not found in search results", id)
+	return model.Manga{}
 }
 
 func TestSyncSourceUsesImportedChaptersOnly(t *testing.T) {
