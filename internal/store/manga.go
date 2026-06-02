@@ -11,8 +11,6 @@ import (
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/db/gen"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/model"
-
-	"github.com/google/uuid"
 )
 
 func (s *Store) SearchManga(ctx context.Context, options model.MangaSearchOptions) ([]model.Manga, error) {
@@ -51,9 +49,12 @@ func (s *Store) CreateManga(ctx context.Context, payload model.MangaPayload) (*m
 		return nil, fmt.Errorf("%w: primary title is required", ErrValidation)
 	}
 
-	id := uuid.NewString()
+	id, err := newID()
+	if err != nil {
+		return nil, err
+	}
 	now := nowUnix()
-	err := s.withTx(ctx, func(q *gen.Queries) error {
+	err = s.withTx(ctx, func(q *gen.Queries) error {
 		if err := q.CreateManga(ctx, gen.CreateMangaParams{
 			ID:            id,
 			PrimaryTitle:  payload.PrimaryTitle,
@@ -237,8 +238,12 @@ func replaceMangaRelations(ctx context.Context, q *gen.Queries, mangaID string, 
 	}
 
 	for index, title := range payload.SecondaryTitles {
+		id, err := newID()
+		if err != nil {
+			return err
+		}
 		if err := q.InsertMangaTitle(ctx, gen.InsertMangaTitleParams{
-			ID:        uuid.NewString(),
+			ID:        id,
 			MangaID:   mangaID,
 			Title:     title,
 			TitleType: "secondary",
@@ -248,8 +253,12 @@ func replaceMangaRelations(ctx context.Context, q *gen.Queries, mangaID string, 
 		}
 	}
 	for index, url := range payload.ArtworkURLs {
+		id, err := newID()
+		if err != nil {
+			return err
+		}
 		if err := q.InsertMangaArtwork(ctx, gen.InsertMangaArtworkParams{
-			ID:        uuid.NewString(),
+			ID:        id,
 			MangaID:   mangaID,
 			ImageUrl:  url,
 			SortOrder: int64(index),
@@ -258,7 +267,10 @@ func replaceMangaRelations(ctx context.Context, q *gen.Queries, mangaID string, 
 		}
 	}
 	for groupIndex, group := range payload.TagGroups {
-		groupID := uuid.NewString()
+		groupID, err := newID()
+		if err != nil {
+			return err
+		}
 		if err := q.InsertMangaTagGroup(ctx, gen.InsertMangaTagGroupParams{
 			ID:        groupID,
 			MangaID:   mangaID,
@@ -268,8 +280,12 @@ func replaceMangaRelations(ctx context.Context, q *gen.Queries, mangaID string, 
 			return err
 		}
 		for tagIndex, tag := range group.Tags {
+			tagID, err := newID()
+			if err != nil {
+				return err
+			}
 			if err := q.InsertMangaTag(ctx, gen.InsertMangaTagParams{
-				ID:         uuid.NewString(),
+				ID:         tagID,
 				TagGroupID: groupID,
 				Title:      tag.Title,
 				SortOrder:  int64(tagIndex),
@@ -279,8 +295,12 @@ func replaceMangaRelations(ctx context.Context, q *gen.Queries, mangaID string, 
 		}
 	}
 	for index, entry := range payload.AdditionalInfo {
+		id, err := newID()
+		if err != nil {
+			return err
+		}
 		if err := q.InsertMangaInfoEntry(ctx, gen.InsertMangaInfoEntryParams{
-			ID:        uuid.NewString(),
+			ID:        id,
 			MangaID:   mangaID,
 			InfoKey:   entry.Key,
 			InfoValue: entry.Value,

@@ -2,7 +2,29 @@ package model
 
 import "encoding/json"
 
-const BackupSchemaVersion = 1
+const BackupSchemaVersion = 2
+
+type BackupManifest struct {
+	Format        string            `json:"format"`
+	SchemaVersion int               `json:"schemaVersion"`
+	CreatedAt     string            `json:"createdAt"`
+	App           BackupManifestApp `json:"app"`
+	Counts        BackupCounts      `json:"counts"`
+}
+
+type BackupManifestApp struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+	BuiltAt string `json:"builtAt"`
+}
+
+type BackupCounts struct {
+	Manga            int `json:"manga"`
+	Chapters         int `json:"chapters"`
+	ChapterSources   int `json:"chapterSources"`
+	Collections      int `json:"collections"`
+	DiscoverSections int `json:"discoverSections"`
+}
 
 type Backup struct {
 	SchemaVersion    int                     `json:"schemaVersion"`

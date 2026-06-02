@@ -230,10 +230,10 @@ export default function SettingsPage() {
         <div className="settings-card settings-backup-card">
           <div className="settings-backup-row">
             <div className="settings-backup-row__main">
-              <span className="settings-backup-row__icon" aria-hidden="true">↓</span>
+                <span className="settings-backup-row__icon" aria-hidden="true">↓</span>
               <div className="settings-backup-row__copy">
-                <span className="settings-backup-row__title">Export Library</span>
-                <span className="settings-backup-row__detail">JSON backup</span>
+                <span className="settings-backup-row__title">Export Backup</span>
+                <span className="settings-backup-row__detail">Diffable ZIP backup</span>
               </div>
             </div>
             <Button size="sm" onClick={handleDownloadBackup} loading={downloadingBackup}>
@@ -262,7 +262,7 @@ export default function SettingsPage() {
             ref={restoreInputRef}
             className="settings-restore__input"
             type="file"
-            accept="application/json,.json"
+            accept="application/zip,.zip"
             disabled={restoringBackup}
             onChange={(event) => handleRestoreFileSelected(event.target.files?.[0] ?? null)}
           />
@@ -320,7 +320,7 @@ export default function SettingsPage() {
         onClose={() => setRestoreTarget(null)}
         onConfirm={handleRestoreBackup}
         title="Restore Backup"
-        message={restoreTarget ? `Restore "${restoreTarget.name}"? This will replace current manga, chapters, collections, discover sections, and chapter sources.` : ""}
+        message={restoreTarget ? `Restore "${restoreTarget.name}"? This ZIP will replace current manga, chapters, collections, discover sections, and chapter sources.` : ""}
         confirmLabel="Restore"
         danger
       />

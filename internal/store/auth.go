@@ -8,7 +8,6 @@ import (
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/apikeys"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/db/gen"
 
-	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -39,8 +38,12 @@ func (s *Store) CreateInitialUser(ctx context.Context, username string, password
 		return nil, err
 	}
 
+	userID, err := newID()
+	if err != nil {
+		return nil, err
+	}
 	user := &UserIdentity{
-		ID:       uuid.NewString(),
+		ID:       userID,
 		Username: username,
 	}
 	if err := s.queries.CreateUser(ctx, gen.CreateUserParams{
@@ -99,8 +102,12 @@ func (s *Store) CreateAPIKey(ctx context.Context, userID string, name string) (s
 	if err != nil {
 		return "", err
 	}
+	id, err := newID()
+	if err != nil {
+		return "", err
+	}
 	if err := s.queries.CreateAPIKey(ctx, gen.CreateAPIKeyParams{
-		ID:        uuid.NewString(),
+		ID:        id,
 		UserID:    userID,
 		Name:      name,
 		KeyPrefix: keyPrefix,

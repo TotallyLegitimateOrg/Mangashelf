@@ -9,7 +9,6 @@ import (
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/db/gen"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/model"
-	"github.com/google/uuid"
 )
 
 func (s *Store) ListCollections(ctx context.Context) ([]model.Collection, error) {
@@ -29,7 +28,10 @@ func (s *Store) CreateCollection(ctx context.Context, payload model.CollectionPa
 	if title == "" {
 		return nil, fmt.Errorf("%w: title is required", ErrValidation)
 	}
-	id := uuid.NewString()
+	id, err := newID()
+	if err != nil {
+		return nil, err
+	}
 	now := nowUnix()
 	if err := s.queries.CreateCollection(ctx, gen.CreateCollectionParams{
 		ID: id, Title: title, SortOrder: now, CreatedAt: now, UpdatedAt: now,

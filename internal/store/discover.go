@@ -11,8 +11,6 @@ import (
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/db/gen"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/model"
-
-	"github.com/google/uuid"
 )
 
 func (s *Store) ListDiscoverSections(ctx context.Context) ([]model.DiscoverSection, error) {
@@ -137,8 +135,11 @@ func (s *Store) CreateDiscoverSection(ctx context.Context, payload model.Discove
 	if err := model.ValidateDiscoverPayload(payload); err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrValidation, err)
 	}
-	id := uuid.NewString()
-	err := s.withTx(ctx, func(q *gen.Queries) error {
+	id, err := newID()
+	if err != nil {
+		return nil, err
+	}
+	err = s.withTx(ctx, func(q *gen.Queries) error {
 		maxSortOrder, err := q.GetMaxDiscoverSortOrder(ctx)
 		if err != nil {
 			return err
@@ -224,7 +225,13 @@ func replaceDiscoverItems(ctx context.Context, q *gen.Queries, sectionID string,
 	for index, item := range items {
 		itemID := item.ID
 		if itemID == "" {
-			itemID = uuid.NewString()
+			var err error
+			itemID, err = newID()
+			if err != nil {
+				return err
+			}
+		} else if !isUUIDv7(itemID) {
+			return fmt.Errorf("%w: discover item %s id must be UUIDv7", ErrValidation, itemID)
 		}
 		var metadata sql.NullString
 		if item.Metadata != nil {

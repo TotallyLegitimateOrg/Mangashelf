@@ -174,31 +174,28 @@ func (s *Server) handleBuildInfo(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
-	backup, err := s.store.ExportBackup(r.Context())
-	if err != nil {
-		s.writeError(w, err)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	filename := fmt.Sprintf("mangashelf-backup-%s.json", time.Now().UTC().Format(time.DateOnly))
+	w.Header().Set("Content-Type", "application/zip")
+	filename := fmt.Sprintf("mangashelf-backup-%s.zip", time.Now().UTC().Format(time.DateOnly))
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	w.WriteHeader(http.StatusOK)
 
-	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(backup); err != nil {
+	if err := s.store.ExportBackupArchive(r.Context(), w); err != nil {
 		s.writeError(w, err)
 	}
 }
 
 func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
-	var backup model.Backup
-	if !s.decodeJSON(w, r, &backup) {
-		return
+	reader := r.Body
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		file, _, err := r.FormFile("backup")
+		if err != nil {
+			s.writeError(w, fmt.Errorf("%w: backup file is required", store.ErrValidation))
+			return
+		}
+		defer file.Close()
+		reader = file
 	}
-	result, err := s.store.RestoreBackup(r.Context(), &backup)
+	result, err := s.store.RestoreBackupArchive(r.Context(), reader)
 	if err != nil {
 		s.writeError(w, err)
 		return

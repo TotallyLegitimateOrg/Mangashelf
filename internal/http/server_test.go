@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -34,7 +35,7 @@ func TestBackupEndpointRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestBackupEndpointReturnsJSONAttachment(t *testing.T) {
+func TestBackupEndpointReturnsZipAttachment(t *testing.T) {
 	dataStore, server, apiKey := newTestHTTPServer(t)
 	ctx := context.Background()
 
@@ -53,38 +54,17 @@ func TestBackupEndpointReturnsJSONAttachment(t *testing.T) {
 	firstBody := requestBackup(t, server, apiKey)
 	secondBody := requestBackup(t, server, apiKey)
 
-	if !bytes.Equal(firstBody, secondBody) {
-		t.Fatalf("backup responses differ across repeated requests\nfirst:  %s\nsecond: %s", firstBody, secondBody)
-	}
-	if !bytes.Contains(firstBody, []byte("\n  \"schemaVersion\":")) {
-		t.Fatalf("backup response is not indented JSON: %s", firstBody)
-	}
-	if !bytes.HasSuffix(firstBody, []byte("\n")) {
-		t.Fatalf("backup response should end with a newline")
-	}
-
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(firstBody, &raw); err != nil {
-		t.Fatalf("Unmarshal returned error: %v", err)
-	}
-	for _, key := range []string{"schemaVersion", "manga", "chapters", "collections", "discoverSections", "chapterSources"} {
-		if _, ok := raw[key]; !ok {
-			t.Fatalf("backup response missing top-level key %q", key)
+	firstFiles := readHTTPBackupArchiveFiles(t, firstBody)
+	secondFiles := readHTTPBackupArchiveFiles(t, secondBody)
+	for _, name := range []string{"manifest.json", "manga/" + manga.ID + ".json"} {
+		if _, ok := firstFiles[name]; !ok {
+			t.Fatalf("backup response missing entry %s", name)
 		}
 	}
-	if _, ok := raw["backup"]; ok {
-		t.Fatalf("backup response should be raw JSON, not wrapped in a backup envelope")
-	}
-
-	var decoded model.Backup
-	if err := json.Unmarshal(firstBody, &decoded); err != nil {
-		t.Fatalf("Unmarshal backup returned error: %v", err)
-	}
-	if decoded.SchemaVersion != model.BackupSchemaVersion {
-		t.Fatalf("SchemaVersion = %d, want %d", decoded.SchemaVersion, model.BackupSchemaVersion)
-	}
-	if len(decoded.Manga) != 1 || decoded.Manga[0].ID != manga.ID {
-		t.Fatalf("decoded manga = %+v, want one exported manga %q", decoded.Manga, manga.ID)
+	delete(firstFiles, "manifest.json")
+	delete(secondFiles, "manifest.json")
+	if !byteMapsEqual(firstFiles, secondFiles) {
+		t.Fatalf("backup entity files differ across repeated requests")
 	}
 }
 
@@ -222,10 +202,10 @@ func requestBackup(t *testing.T, server *Server, apiKey string) []byte {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
 	}
-	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Fatalf("Content-Type = %q, want %q", got, "application/json; charset=utf-8")
+	if got := rec.Header().Get("Content-Type"); got != "application/zip" {
+		t.Fatalf("Content-Type = %q, want %q", got, "application/zip")
 	}
-	wantFilename := "mangashelf-backup-" + time.Now().UTC().Format(time.DateOnly) + ".json"
+	wantFilename := "mangashelf-backup-" + time.Now().UTC().Format(time.DateOnly) + ".zip"
 	wantDisposition := fmt.Sprintf(`attachment; filename="%s"`, wantFilename)
 	if got := rec.Header().Get("Content-Disposition"); got != wantDisposition {
 		t.Fatalf("Content-Disposition = %q, want %q", got, wantDisposition)
@@ -285,9 +265,12 @@ func TestBackupRestoreEndpointReplacesLibraryData(t *testing.T) {
 		t.Fatalf("restore result = %+v, want one manga and chapter", result)
 	}
 
-	after := requestBackup(t, server, apiKey)
-	if !bytes.Equal(body, after) {
-		t.Fatalf("backup after restore differs\nbefore: %s\nafter:  %s", body, after)
+	before := readHTTPBackupArchiveFiles(t, body)
+	after := readHTTPBackupArchiveFiles(t, requestBackup(t, server, apiKey))
+	delete(before, "manifest.json")
+	delete(after, "manifest.json")
+	if !byteMapsEqual(before, after) {
+		t.Fatalf("backup after restore differs")
 	}
 }
 
@@ -303,4 +286,43 @@ func TestBackupRestoreEndpointRejectsInvalidPayload(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
 	}
+}
+
+func readHTTPBackupArchiveFiles(t *testing.T, body []byte) map[string][]byte {
+	t.Helper()
+
+	reader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("NewReader returned error: %v", err)
+	}
+	files := make(map[string][]byte, len(reader.File))
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("Open(%s) returned error: %v", file.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("ReadAll(%s) returned error: %v", file.Name, err)
+		}
+		files[file.Name] = data
+	}
+	return files
+}
+
+func byteMapsEqual(left map[string][]byte, right map[string][]byte) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		rightValue, ok := right[key]
+		if !ok || !bytes.Equal(leftValue, rightValue) {
+			return false
+		}
+	}
+	return true
 }

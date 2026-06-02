@@ -12,7 +12,10 @@ build:
 	$(GORELEASER) build --snapshot --clean --single-target --output $(BIN)
 
 clean:
-	rm -rf ./bin ./dist ./tmp ./web/dist ./extension/bundles ./coverage.out ./*.tsbuildinfo ./web/*.tsbuildinfo ./extension/*.tsbuildinfo
+	rm -rf ./bin ./dist ./tmp ./web/dist ./extension/bundles \
+		./coverage.out ./*.tsbuildinfo ./web/*.tsbuildinfo ./extension/*.tsbuildinfo \
+		./*.db ./*.db-* ./*.sqlite ./*.sqlite-* \
+		./data/*.db ./data/*.db-* ./data/*.sqlite ./data/*.sqlite-*
 
 dev:
 	$(BUN) install; \

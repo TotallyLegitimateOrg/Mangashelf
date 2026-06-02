@@ -1,10 +1,12 @@
 package store
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -83,7 +85,6 @@ func TestExportBackupIncludesRestorableDataAndOmitsSensitiveFields(t *testing.T)
 		Mode:  "manual",
 		Items: []model.DiscoverSectionItem{
 			{
-				ID:       "manual-item",
 				Type:     "simpleCarouselItem",
 				MangaID:  first.ID,
 				ImageURL: "https://example.com/manual.jpg",
@@ -168,7 +169,7 @@ func TestExportBackupIncludesRestorableDataAndOmitsSensitiveFields(t *testing.T)
 	for _, section := range backup.DiscoverSections {
 		sectionsByID[section.ID] = section
 	}
-	if got := sectionsByID[manualSection.ID]; len(got.Items) != 1 || got.Items[0].ID != "manual-item" {
+	if got := sectionsByID[manualSection.ID]; len(got.Items) != 1 || got.Items[0].Subtitle != "Stored item" || !isUUIDv7(got.Items[0].ID) {
 		t.Fatalf("manual discover section = %+v, want stored manual item", got)
 	}
 	if got := sectionsByID[liveSection.ID]; got.LiveRule == nil || got.LiveRule.Preset != "title_asc" || len(got.Items) != 0 {
@@ -218,6 +219,40 @@ func TestExportBackupIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestExportBackupArchiveWritesDiffableTree(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+
+	manga := mustCreateMangaWithPayload(t, store, ctx, model.MangaPayload{PrimaryTitle: "Archive"})
+	chapter := mustCreateChapterForManga(t, store, ctx, manga.ID, 1, "Chapter", "2024-04-01")
+
+	var first bytes.Buffer
+	if err := store.ExportBackupArchive(ctx, &first); err != nil {
+		t.Fatalf("ExportBackupArchive first returned error: %v", err)
+	}
+	var second bytes.Buffer
+	if err := store.ExportBackupArchive(ctx, &second); err != nil {
+		t.Fatalf("ExportBackupArchive second returned error: %v", err)
+	}
+
+	firstFiles := readBackupArchiveFiles(t, first.Bytes())
+	secondFiles := readBackupArchiveFiles(t, second.Bytes())
+	for _, name := range []string{
+		"manifest.json",
+		"manga/" + manga.ID + ".json",
+		"chapters/" + chapter.ID + ".json",
+	} {
+		if _, ok := firstFiles[name]; !ok {
+			t.Fatalf("backup archive missing %s", name)
+		}
+	}
+	delete(firstFiles, "manifest.json")
+	delete(secondFiles, "manifest.json")
+	if !mapsEqual(firstFiles, secondFiles) {
+		t.Fatalf("entity files differ across repeated archive exports")
+	}
+}
+
 func TestRestoreBackupRoundTripsExportedData(t *testing.T) {
 	ctx := context.Background()
 	source := newTestStore(t)
@@ -248,7 +283,6 @@ func TestRestoreBackupRoundTripsExportedData(t *testing.T) {
 		Type:  "simpleCarousel",
 		Mode:  "manual",
 		Items: []model.DiscoverSectionItem{{
-			ID:       "round-trip-item",
 			Type:     "simpleCarouselItem",
 			MangaID:  manga.ID,
 			ImageURL: "https://example.com/item.jpg",
@@ -259,21 +293,25 @@ func TestRestoreBackupRoundTripsExportedData(t *testing.T) {
 		t.Fatalf("CreateDiscoverSection returned error: %v", err)
 	}
 
-	backup, err := source.ExportBackup(ctx)
-	if err != nil {
-		t.Fatalf("ExportBackup returned error: %v", err)
+	var backup bytes.Buffer
+	if err := source.ExportBackupArchive(ctx, &backup); err != nil {
+		t.Fatalf("ExportBackupArchive returned error: %v", err)
 	}
 	target := newTestStore(t)
-	if _, err := target.RestoreBackup(ctx, backup); err != nil {
-		t.Fatalf("RestoreBackup returned error: %v", err)
+	if _, err := target.RestoreBackupArchive(ctx, bytes.NewReader(backup.Bytes())); err != nil {
+		t.Fatalf("RestoreBackupArchive returned error: %v", err)
 	}
-	restored, err := target.ExportBackup(ctx)
-	if err != nil {
-		t.Fatalf("ExportBackup restored returned error: %v", err)
+	var restored bytes.Buffer
+	if err := target.ExportBackupArchive(ctx, &restored); err != nil {
+		t.Fatalf("ExportBackupArchive restored returned error: %v", err)
 	}
 
-	if !bytes.Equal(marshalBackupJSON(t, backup), marshalBackupJSON(t, restored)) {
-		t.Fatalf("restored backup differs\nbefore: %s\nafter:  %s", marshalBackupJSON(t, backup), marshalBackupJSON(t, restored))
+	before := readBackupArchiveFiles(t, backup.Bytes())
+	after := readBackupArchiveFiles(t, restored.Bytes())
+	delete(before, "manifest.json")
+	delete(after, "manifest.json")
+	if !mapsEqual(before, after) {
+		t.Fatalf("restored backup tree differs")
 	}
 }
 
@@ -358,4 +396,43 @@ func marshalBackupJSON(t *testing.T, backup *model.Backup) []byte {
 		t.Fatalf("Encode returned error: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func readBackupArchiveFiles(t *testing.T, body []byte) map[string][]byte {
+	t.Helper()
+
+	reader, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("NewReader returned error: %v", err)
+	}
+	files := make(map[string][]byte, len(reader.File))
+	for _, file := range reader.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("Open(%s) returned error: %v", file.Name, err)
+		}
+		data, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("ReadAll(%s) returned error: %v", file.Name, err)
+		}
+		files[file.Name] = data
+	}
+	return files
+}
+
+func mapsEqual(left map[string][]byte, right map[string][]byte) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		rightValue, ok := right[key]
+		if !ok || !bytes.Equal(leftValue, rightValue) {
+			return false
+		}
+	}
+	return true
 }

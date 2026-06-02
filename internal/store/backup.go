@@ -1,16 +1,21 @@
 package store
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"path"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/TotallyLegitimateOrg/Mangashelf/internal/buildinfo"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/model"
-	"github.com/google/uuid"
 )
 
 func (s *Store) ExportBackup(ctx context.Context) (*model.Backup, error) {
@@ -141,6 +146,258 @@ func (s *Store) ExportBackup(ctx context.Context) (*model.Backup, error) {
 	}, nil
 }
 
+const (
+	backupFormat       = "mangashelf.backup"
+	backupManifestPath = "manifest.json"
+)
+
+var backupZipTime = time.Date(1980, 1, 1, 0, 0, 0, 0, time.UTC)
+
+func (s *Store) ExportBackupArchive(ctx context.Context, w io.Writer) error {
+	backup, err := s.ExportBackup(ctx)
+	if err != nil {
+		return err
+	}
+	normalizeBackupJSON(backup)
+	if err := validateBackup(backup); err != nil {
+		return err
+	}
+
+	zw := zip.NewWriter(w)
+	info := buildinfo.Current()
+
+	manifest := model.BackupManifest{
+		Format:        backupFormat,
+		SchemaVersion: model.BackupSchemaVersion,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		App: model.BackupManifestApp{
+			Version: info.Version,
+			Commit:  info.Commit,
+			BuiltAt: info.BuiltAt,
+		},
+		Counts: model.BackupCounts{
+			Manga:            len(backup.Manga),
+			Chapters:         len(backup.Chapters),
+			ChapterSources:   len(backup.ChapterSources),
+			Collections:      len(backup.Collections),
+			DiscoverSections: len(backup.DiscoverSections),
+		},
+	}
+	if err := writeBackupJSONFile(zw, backupManifestPath, manifest); err != nil {
+		return err
+	}
+
+	sort.Slice(backup.Manga, func(i, j int) bool { return backup.Manga[i].ID < backup.Manga[j].ID })
+	for _, item := range backup.Manga {
+		if err := writeBackupJSONFile(zw, "manga/"+item.ID+".json", item); err != nil {
+			return err
+		}
+	}
+	sort.Slice(backup.Chapters, func(i, j int) bool { return backup.Chapters[i].ID < backup.Chapters[j].ID })
+	for _, item := range backup.Chapters {
+		if err := writeBackupJSONFile(zw, "chapters/"+item.ID+".json", item); err != nil {
+			return err
+		}
+	}
+	sort.Slice(backup.ChapterSources, func(i, j int) bool { return backup.ChapterSources[i].ID < backup.ChapterSources[j].ID })
+	for _, item := range backup.ChapterSources {
+		if err := writeBackupJSONFile(zw, "chapter-sources/"+item.ID+".json", item); err != nil {
+			return err
+		}
+	}
+	sort.Slice(backup.Collections, func(i, j int) bool { return backup.Collections[i].ID < backup.Collections[j].ID })
+	for _, item := range backup.Collections {
+		if err := writeBackupJSONFile(zw, "collections/"+item.ID+".json", item); err != nil {
+			return err
+		}
+	}
+	sort.Slice(backup.DiscoverSections, func(i, j int) bool { return backup.DiscoverSections[i].ID < backup.DiscoverSections[j].ID })
+	for _, item := range backup.DiscoverSections {
+		if err := writeBackupJSONFile(zw, "discover-sections/"+item.ID+".json", item); err != nil {
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+func (s *Store) RestoreBackupArchive(ctx context.Context, r io.Reader) (*model.BackupRestoreResult, error) {
+	body, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read backup archive: %w", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		return nil, fmt.Errorf("%w: backup must be a valid zip archive", ErrValidation)
+	}
+
+	backup := &model.Backup{SchemaVersion: model.BackupSchemaVersion}
+	var manifest *model.BackupManifest
+	seen := map[string]struct{}{}
+	for _, file := range zr.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		clean := path.Clean(file.Name)
+		if clean != file.Name || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
+			return nil, fmt.Errorf("%w: invalid backup path %q", ErrValidation, file.Name)
+		}
+		if _, ok := seen[clean]; ok {
+			return nil, fmt.Errorf("%w: duplicate backup entry %s", ErrValidation, clean)
+		}
+		seen[clean] = struct{}{}
+
+		switch {
+		case clean == backupManifestPath:
+			var parsed model.BackupManifest
+			if err := readBackupZipJSON(file, &parsed); err != nil {
+				return nil, err
+			}
+			manifest = &parsed
+		case strings.HasPrefix(clean, "manga/"):
+			var item model.BackupManga
+			if err := readBackupEntity(file, clean, "manga", &item.ID, &item); err != nil {
+				return nil, err
+			}
+			backup.Manga = append(backup.Manga, item)
+		case strings.HasPrefix(clean, "chapters/"):
+			var item model.BackupChapter
+			if err := readBackupEntity(file, clean, "chapters", &item.ID, &item); err != nil {
+				return nil, err
+			}
+			backup.Chapters = append(backup.Chapters, item)
+		case strings.HasPrefix(clean, "chapter-sources/"):
+			var item model.BackupChapterSource
+			if err := readBackupEntity(file, clean, "chapter-sources", &item.ID, &item); err != nil {
+				return nil, err
+			}
+			backup.ChapterSources = append(backup.ChapterSources, item)
+		case strings.HasPrefix(clean, "collections/"):
+			var item model.BackupCollection
+			if err := readBackupEntity(file, clean, "collections", &item.ID, &item); err != nil {
+				return nil, err
+			}
+			backup.Collections = append(backup.Collections, item)
+		case strings.HasPrefix(clean, "discover-sections/"):
+			var item model.BackupDiscoverSection
+			if err := readBackupEntity(file, clean, "discover-sections", &item.ID, &item); err != nil {
+				return nil, err
+			}
+			backup.DiscoverSections = append(backup.DiscoverSections, item)
+		default:
+			return nil, fmt.Errorf("%w: unknown backup entry %s", ErrValidation, clean)
+		}
+	}
+	if manifest == nil {
+		return nil, fmt.Errorf("%w: backup manifest is required", ErrValidation)
+	}
+	if manifest.Format != backupFormat {
+		return nil, fmt.Errorf("%w: unsupported backup format %q", ErrValidation, manifest.Format)
+	}
+	if manifest.SchemaVersion != model.BackupSchemaVersion {
+		return nil, fmt.Errorf("%w: unsupported backup schema version %d", ErrValidation, manifest.SchemaVersion)
+	}
+	if err := validateBackupCounts(manifest.Counts, backup); err != nil {
+		return nil, err
+	}
+	normalizeBackupJSON(backup)
+	return s.RestoreBackup(ctx, backup)
+}
+
+func writeBackupJSONFile(zw *zip.Writer, name string, value any) error {
+	header := &zip.FileHeader{Name: name, Method: zip.Deflate}
+	header.SetModTime(backupZipTime)
+	w, err := zw.CreateHeader(header)
+	if err != nil {
+		return fmt.Errorf("create backup entry %s: %w", name, err)
+	}
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(value); err != nil {
+		return fmt.Errorf("write backup entry %s: %w", name, err)
+	}
+	return nil
+}
+
+func readBackupZipJSON(file *zip.File, target any) error {
+	reader, err := file.Open()
+	if err != nil {
+		return fmt.Errorf("open backup entry %s: %w", file.Name, err)
+	}
+	defer reader.Close()
+	decoder := json.NewDecoder(reader)
+	if err := decoder.Decode(target); err != nil {
+		return fmt.Errorf("%w: invalid JSON in %s", ErrValidation, file.Name)
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return fmt.Errorf("%w: trailing JSON in %s", ErrValidation, file.Name)
+	}
+	return nil
+}
+
+func readBackupEntity(file *zip.File, clean string, dir string, id *string, target any) error {
+	if path.Dir(clean) != dir || path.Ext(clean) != ".json" {
+		return fmt.Errorf("%w: invalid backup entry %s", ErrValidation, clean)
+	}
+	wantID := strings.TrimSuffix(path.Base(clean), ".json")
+	if wantID == "" || strings.Contains(wantID, "/") {
+		return fmt.Errorf("%w: invalid backup entry %s", ErrValidation, clean)
+	}
+	if err := readBackupZipJSON(file, target); err != nil {
+		return err
+	}
+	if *id != wantID {
+		return fmt.Errorf("%w: backup entry %s contains id %q", ErrValidation, clean, *id)
+	}
+	return nil
+}
+
+func validateBackupCounts(counts model.BackupCounts, backup *model.Backup) error {
+	if counts.Manga != len(backup.Manga) {
+		return fmt.Errorf("%w: manifest manga count mismatch", ErrValidation)
+	}
+	if counts.Chapters != len(backup.Chapters) {
+		return fmt.Errorf("%w: manifest chapter count mismatch", ErrValidation)
+	}
+	if counts.ChapterSources != len(backup.ChapterSources) {
+		return fmt.Errorf("%w: manifest chapter source count mismatch", ErrValidation)
+	}
+	if counts.Collections != len(backup.Collections) {
+		return fmt.Errorf("%w: manifest collection count mismatch", ErrValidation)
+	}
+	if counts.DiscoverSections != len(backup.DiscoverSections) {
+		return fmt.Errorf("%w: manifest discover section count mismatch", ErrValidation)
+	}
+	return nil
+}
+
+func normalizeBackupJSON(backup *model.Backup) {
+	for index := range backup.ChapterSources {
+		backup.ChapterSources[index].Config = normalizeRawJSON(backup.ChapterSources[index].Config)
+	}
+	for sectionIndex := range backup.DiscoverSections {
+		for itemIndex := range backup.DiscoverSections[sectionIndex].Items {
+			item := &backup.DiscoverSections[sectionIndex].Items[itemIndex]
+			item.Metadata = normalizeRawJSON(item.Metadata)
+		}
+	}
+}
+
+func normalizeRawJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return raw
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return raw
+	}
+	normalized, err := json.Marshal(value)
+	if err != nil {
+		return raw
+	}
+	return normalized
+}
+
 func (s *Store) RestoreBackup(ctx context.Context, backup *model.Backup) (*model.BackupRestoreResult, error) {
 	if backup == nil {
 		return nil, fmt.Errorf("%w: backup is required", ErrValidation)
@@ -198,6 +455,9 @@ func validateBackup(backup *model.Backup) error {
 		if strings.TrimSpace(item.ID) == "" {
 			return fmt.Errorf("%w: manga id is required", ErrValidation)
 		}
+		if !isUUIDv7(item.ID) {
+			return fmt.Errorf("%w: manga %s id must be UUIDv7", ErrValidation, item.ID)
+		}
 		if strings.TrimSpace(item.PrimaryTitle) == "" {
 			return fmt.Errorf("%w: manga %s primary title is required", ErrValidation, item.ID)
 		}
@@ -216,6 +476,9 @@ func validateBackup(backup *model.Backup) error {
 	for _, source := range backup.ChapterSources {
 		if strings.TrimSpace(source.ID) == "" {
 			return fmt.Errorf("%w: chapter source id is required", ErrValidation)
+		}
+		if !isUUIDv7(source.ID) {
+			return fmt.Errorf("%w: chapter source %s id must be UUIDv7", ErrValidation, source.ID)
 		}
 		if _, exists := sourceIDs[source.ID]; exists {
 			return fmt.Errorf("%w: duplicate chapter source id %s", ErrValidation, source.ID)
@@ -244,6 +507,9 @@ func validateBackup(backup *model.Backup) error {
 	for _, chapter := range backup.Chapters {
 		if strings.TrimSpace(chapter.ID) == "" {
 			return fmt.Errorf("%w: chapter id is required", ErrValidation)
+		}
+		if !isUUIDv7(chapter.ID) {
+			return fmt.Errorf("%w: chapter %s id must be UUIDv7", ErrValidation, chapter.ID)
 		}
 		if _, exists := chapterIDs[chapter.ID]; exists {
 			return fmt.Errorf("%w: duplicate chapter id %s", ErrValidation, chapter.ID)
@@ -275,6 +541,9 @@ func validateBackup(backup *model.Backup) error {
 		if strings.TrimSpace(collection.ID) == "" {
 			return fmt.Errorf("%w: collection id is required", ErrValidation)
 		}
+		if !isUUIDv7(collection.ID) {
+			return fmt.Errorf("%w: collection %s id must be UUIDv7", ErrValidation, collection.ID)
+		}
 		if strings.TrimSpace(collection.Title) == "" {
 			return fmt.Errorf("%w: collection %s title is required", ErrValidation, collection.ID)
 		}
@@ -295,6 +564,9 @@ func validateBackup(backup *model.Backup) error {
 		if strings.TrimSpace(section.ID) == "" {
 			return fmt.Errorf("%w: discover section id is required", ErrValidation)
 		}
+		if !isUUIDv7(section.ID) {
+			return fmt.Errorf("%w: discover section %s id must be UUIDv7", ErrValidation, section.ID)
+		}
 		if strings.TrimSpace(section.Title) == "" {
 			return fmt.Errorf("%w: discover section %s title is required", ErrValidation, section.ID)
 		}
@@ -304,6 +576,9 @@ func validateBackup(backup *model.Backup) error {
 		for _, item := range section.Items {
 			if strings.TrimSpace(item.ID) == "" {
 				return fmt.Errorf("%w: discover item id is required", ErrValidation)
+			}
+			if !isUUIDv7(item.ID) {
+				return fmt.Errorf("%w: discover item %s id must be UUIDv7", ErrValidation, item.ID)
 			}
 			if item.MangaID != "" {
 				if _, ok := mangaIDs[item.MangaID]; !ok {
@@ -370,21 +645,35 @@ INSERT INTO manga (
 			return fmt.Errorf("restore manga %s: %w", item.ID, err)
 		}
 		for index, title := range item.SecondaryTitles {
+			id, err := newID()
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO manga_titles (id, manga_id, title, title_type, sort_order) VALUES (?, ?, ?, ?, ?)`,
-				uuid.NewString(), item.ID, title, "secondary", index); err != nil {
+				id, item.ID, title, "secondary", index); err != nil {
 				return fmt.Errorf("restore manga %s title: %w", item.ID, err)
 			}
 		}
 		for index, url := range item.ArtworkURLs {
+			id, err := newID()
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO manga_artwork (id, manga_id, image_url, sort_order) VALUES (?, ?, ?, ?)`,
-				uuid.NewString(), item.ID, url, index); err != nil {
+				id, item.ID, url, index); err != nil {
 				return fmt.Errorf("restore manga %s artwork: %w", item.ID, err)
 			}
 		}
 		for groupIndex, group := range item.TagGroups {
 			groupID := group.ID
 			if groupID == "" {
-				groupID = uuid.NewString()
+				var err error
+				groupID, err = newID()
+				if err != nil {
+					return err
+				}
+			} else if !isUUIDv7(groupID) {
+				return fmt.Errorf("%w: manga %s tag group %s id must be UUIDv7", ErrValidation, item.ID, groupID)
 			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO manga_tag_groups (id, manga_id, title, sort_order) VALUES (?, ?, ?, ?)`,
 				groupID, item.ID, group.Title, groupIndex); err != nil {
@@ -393,7 +682,13 @@ INSERT INTO manga (
 			for tagIndex, tag := range group.Tags {
 				tagID := tag.ID
 				if tagID == "" {
-					tagID = uuid.NewString()
+					var err error
+					tagID, err = newID()
+					if err != nil {
+						return err
+					}
+				} else if !isUUIDv7(tagID) {
+					return fmt.Errorf("%w: manga %s tag %s id must be UUIDv7", ErrValidation, item.ID, tagID)
 				}
 				if _, err := tx.ExecContext(ctx, `INSERT INTO manga_tags (id, tag_group_id, title, sort_order) VALUES (?, ?, ?, ?)`,
 					tagID, groupID, tag.Title, tagIndex); err != nil {
@@ -402,8 +697,12 @@ INSERT INTO manga (
 			}
 		}
 		for index, entry := range item.AdditionalInfo {
+			id, err := newID()
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO manga_info_entries (id, manga_id, info_key, info_value, sort_order) VALUES (?, ?, ?, ?, ?)`,
-				uuid.NewString(), item.ID, entry.Key, entry.Value, index); err != nil {
+				id, item.ID, entry.Key, entry.Value, index); err != nil {
 				return fmt.Errorf("restore manga %s info: %w", item.ID, err)
 			}
 		}
@@ -450,14 +749,22 @@ INSERT INTO chapters (
 			return fmt.Errorf("restore chapter %s: %w", chapter.ID, err)
 		}
 		for index, entry := range chapter.AdditionalInfo {
+			id, err := newID()
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO chapter_info_entries (id, chapter_id, info_key, info_value, sort_order) VALUES (?, ?, ?, ?, ?)`,
-				uuid.NewString(), chapter.ID, entry.Key, entry.Value, index); err != nil {
+				id, chapter.ID, entry.Key, entry.Value, index); err != nil {
 				return fmt.Errorf("restore chapter %s info: %w", chapter.ID, err)
 			}
 		}
 		for index, page := range chapter.Pages {
+			id, err := newID()
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `INSERT INTO chapter_pages (id, chapter_id, page_num, image_url) VALUES (?, ?, ?, ?)`,
-				uuid.NewString(), chapter.ID, index+1, page); err != nil {
+				id, chapter.ID, index+1, page); err != nil {
 				return fmt.Errorf("restore chapter %s page: %w", chapter.ID, err)
 			}
 		}

@@ -164,7 +164,6 @@ func TestManualDiscoverSectionRoundTripsStoredItems(t *testing.T) {
 		Mode:  "manual",
 		Items: []model.DiscoverSectionItem{
 			{
-				ID:       "manual-item",
 				Type:     "simpleCarouselItem",
 				MangaID:  manga.ID,
 				ImageURL: "https://example.com/manual.jpg",
@@ -183,7 +182,7 @@ func TestManualDiscoverSectionRoundTripsStoredItems(t *testing.T) {
 	if got := len(section.Items); got != 1 {
 		t.Fatalf("manual section item count = %d, want 1", got)
 	}
-	if section.Items[0].ID != "manual-item" || section.Items[0].Subtitle != "Stored" {
+	if !isUUIDv7(section.Items[0].ID) || section.Items[0].Subtitle != "Stored" {
 		t.Fatalf("manual item = %+v, want stored item payload", section.Items[0])
 	}
 }

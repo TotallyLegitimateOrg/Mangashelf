@@ -168,7 +168,7 @@ function parseApiErrorMessage(status: number, responseText: string): string {
 }
 
 function backupFilenameFallback(): string {
-  return `mangashelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  return `mangashelf-backup-${new Date().toISOString().slice(0, 10)}.zip`;
 }
 
 function filenameFromContentDisposition(header: string | null): string | null {
@@ -271,13 +271,32 @@ export async function downloadBackup(): Promise<void> {
 }
 
 export async function restoreBackup(file: File): Promise<BackupRestoreResult> {
-  let payload: unknown;
+  const headers: Record<string, string> = { "Content-Type": "application/zip" };
+  const token = getStoredToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res: Response;
   try {
-    payload = JSON.parse(await file.text());
-  } catch {
-    throw new Error("Backup file must contain valid JSON");
+    res = await fetch("/api/backups/restore", {
+      method: "POST",
+      headers,
+      body: file,
+    });
+  } catch (err) {
+    const reason = err instanceof Error && err.message.trim() ? `: ${err.message}` : "";
+    throw new ApiError(`Network request failed${reason}`, 0, {
+      method: "POST",
+      path: "/api/backups/restore",
+    });
   }
-  return request<BackupRestoreResult>("POST", "/api/backups/restore", payload);
+  const text = await res.text();
+  if (!res.ok) {
+    throw new ApiError(parseApiErrorMessage(res.status, text), res.status, {
+      method: "POST",
+      path: "/api/backups/restore",
+    });
+  }
+  return text ? JSON.parse(text) : ({} as BackupRestoreResult);
 }
 
 /* ---- Manga ---- */

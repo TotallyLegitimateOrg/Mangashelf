@@ -18,8 +18,6 @@ import (
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/importer"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/model"
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/services"
-
-	"github.com/google/uuid"
 )
 
 type chapterProvenance struct {
@@ -177,7 +175,11 @@ func (s *Store) createAndSyncChapterSource(ctx context.Context, mangaID string, 
 		if importErr != nil {
 			return importErr
 		}
-		return q.CreateChapterSourceSyncLog(ctx, buildChapterSourceSyncLogParams(params.ID, mangaID, "success", stats, "", nowUnix()))
+		logParams, err := buildChapterSourceSyncLogParams(params.ID, mangaID, "success", stats, "", nowUnix())
+		if err != nil {
+			return err
+		}
+		return q.CreateChapterSourceSyncLog(ctx, logParams)
 	}); err != nil {
 		return nil, err
 	}
@@ -288,7 +290,11 @@ func (s *Store) SyncChapterSource(ctx context.Context, mangaID string, sourceID 
 		}); err != nil {
 			return err
 		}
-		if err := q.CreateChapterSourceSyncLog(ctx, buildChapterSourceSyncLogParams(sourceID, mangaID, "success", stats, "", now)); err != nil {
+		logParams, err := buildChapterSourceSyncLogParams(sourceID, mangaID, "success", stats, "", now)
+		if err != nil {
+			return err
+		}
+		if err := q.CreateChapterSourceSyncLog(ctx, logParams); err != nil {
 			return err
 		}
 		return nil
@@ -908,7 +914,10 @@ func (s *Store) writeChapterWithQueries(ctx context.Context, q *gen.Queries, cha
 	}
 
 	if chapterID == "" {
-		chapterID = uuid.NewString()
+		chapterID, err = newID()
+		if err != nil {
+			return "", err
+		}
 	}
 
 	params := gen.CreateChapterParams{
@@ -965,8 +974,12 @@ func (s *Store) writeChapterWithQueries(ctx context.Context, q *gen.Queries, cha
 		return "", err
 	}
 	for index, entry := range payload.AdditionalInfo {
+		id, err := newID()
+		if err != nil {
+			return "", err
+		}
 		if err := q.InsertChapterInfoEntry(ctx, gen.InsertChapterInfoEntryParams{
-			ID:        uuid.NewString(),
+			ID:        id,
 			ChapterID: chapterID,
 			InfoKey:   entry.Key,
 			InfoValue: entry.Value,
@@ -976,8 +989,12 @@ func (s *Store) writeChapterWithQueries(ctx context.Context, q *gen.Queries, cha
 		}
 	}
 	for index, page := range payload.Pages {
+		id, err := newID()
+		if err != nil {
+			return "", err
+		}
 		if err := q.InsertChapterPage(ctx, gen.InsertChapterPageParams{
-			ID:        uuid.NewString(),
+			ID:        id,
 			ChapterID: chapterID,
 			PageNum:   int64(index + 1),
 			ImageUrl:  page,
@@ -1194,8 +1211,12 @@ func buildChapterSourceParams(ctx context.Context, q *gen.Queries, mangaID strin
 	}
 
 	now := nowUnix()
+	id, err := newID()
+	if err != nil {
+		return gen.CreateChapterSourceParams{}, err
+	}
 	params := gen.CreateChapterSourceParams{
-		ID:                   uuid.NewString(),
+		ID:                   id,
 		MangaID:              mangaID,
 		Provider:             normalized.Provider,
 		Mode:                 mode,
@@ -1263,9 +1284,13 @@ func syncLogFromRow(row gen.ChapterSourceSyncLog) model.ChapterSourceSyncLog {
 	}
 }
 
-func buildChapterSourceSyncLogParams(sourceID string, mangaID string, status string, stats chapterImportStats, syncErr string, now int64) gen.CreateChapterSourceSyncLogParams {
+func buildChapterSourceSyncLogParams(sourceID string, mangaID string, status string, stats chapterImportStats, syncErr string, now int64) (gen.CreateChapterSourceSyncLogParams, error) {
+	id, err := newID()
+	if err != nil {
+		return gen.CreateChapterSourceSyncLogParams{}, err
+	}
 	return gen.CreateChapterSourceSyncLogParams{
-		ID:             uuid.NewString(),
+		ID:             id,
 		SourceID:       sourceID,
 		MangaID:        mangaID,
 		Status:         status,
@@ -1275,11 +1300,15 @@ func buildChapterSourceSyncLogParams(sourceID string, mangaID string, status str
 		SkippedCount:   int64(stats.Skipped),
 		Error:          syncErr,
 		CreatedAt:      now,
-	}
+	}, nil
 }
 
 func (s *Store) createChapterSourceSyncLog(ctx context.Context, sourceID string, mangaID string, status string, stats chapterImportStats, syncErr string, now int64) {
-	if err := s.queries.CreateChapterSourceSyncLog(ctx, buildChapterSourceSyncLogParams(sourceID, mangaID, status, stats, syncErr, now)); err != nil {
+	logParams, err := buildChapterSourceSyncLogParams(sourceID, mangaID, status, stats, syncErr, now)
+	if err == nil {
+		err = s.queries.CreateChapterSourceSyncLog(ctx, logParams)
+	}
+	if err != nil {
 		s.log.Error("sync: failed to persist sync log", "sourceId", sourceID, "error", err)
 	}
 }
