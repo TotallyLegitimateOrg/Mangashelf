@@ -460,6 +460,108 @@ func (s *Store) UpdateChapter(ctx context.Context, mangaID string, chapterID str
 	return s.writeChapter(ctx, chapterID, mangaID, payload, provenanceFromOrigin(existing.Origin))
 }
 
+func (s *Store) BulkUpdateChapterMetadata(ctx context.Context, mangaID string, payload model.ChapterBulkMetadataPayload) (*model.ChapterBulkMetadataResult, error) {
+	if _, err := s.loadManga(ctx, mangaID); err != nil {
+		return nil, err
+	}
+	payload = model.NormalizeChapterBulkMetadataPayload(payload)
+	if len(payload.ChapterIDs) == 0 {
+		return nil, fmt.Errorf("%w: at least one chapter is required", ErrValidation)
+	}
+	if payload.LangCode == nil && payload.Version == nil {
+		return nil, fmt.Errorf("%w: language or version is required", ErrValidation)
+	}
+	for _, chapterID := range payload.ChapterIDs {
+		if _, _, _, ok := importer.ParseProxyChapterID(chapterID); ok {
+			return nil, ErrForbidden
+		}
+	}
+
+	now := nowUnix()
+	updatedIDs := make([]string, 0, len(payload.ChapterIDs))
+	err := s.withTx(ctx, func(q *gen.Queries) error {
+		rows, err := q.ListStoredChapters(ctx, mangaID)
+		if err != nil {
+			return err
+		}
+
+		rowsByID := make(map[string]gen.ListStoredChaptersRow, len(rows))
+		for _, row := range rows {
+			rowsByID[row.ID] = row
+		}
+
+		selected := make(map[string]struct{}, len(payload.ChapterIDs))
+		for _, chapterID := range payload.ChapterIDs {
+			row, ok := rowsByID[chapterID]
+			if !ok || row.MangaID != mangaID {
+				return ErrNotFound
+			}
+			if _, exists := selected[chapterID]; exists {
+				continue
+			}
+			selected[chapterID] = struct{}{}
+			updatedIDs = append(updatedIDs, chapterID)
+		}
+
+		identities := make(map[string]string, len(rows))
+		for _, row := range rows {
+			langCode := row.LangCode
+			version := row.Version
+			if _, ok := selected[row.ID]; ok {
+				if payload.LangCode != nil {
+					langCode = *payload.LangCode
+				}
+				if payload.Version != nil {
+					version = *payload.Version
+				}
+			}
+			identity := importer.CreateChapterIdentityKey(row.ChapNum, langCode, version).Key
+			if existingID, exists := identities[identity]; exists && existingID != row.ID {
+				return fmt.Errorf("%w: changing these chapters would create duplicate chapter identities", ErrConflict)
+			}
+			identities[identity] = row.ID
+		}
+
+		for _, chapterID := range updatedIDs {
+			row := rowsByID[chapterID]
+			langCode := row.LangCode
+			version := row.Version
+			if payload.LangCode != nil {
+				langCode = *payload.LangCode
+			}
+			if payload.Version != nil {
+				version = *payload.Version
+			}
+			if err := q.UpdateChapterLanguageVersion(ctx, gen.UpdateChapterLanguageVersionParams{
+				LangCode:    langCode,
+				Version:     version,
+				LastUpdated: now,
+				ID:          chapterID,
+				MangaID:     mangaID,
+			}); err != nil {
+				return err
+			}
+		}
+
+		return q.TouchMangaUpdatedAt(ctx, gen.TouchMangaUpdatedAtParams{
+			UpdatedAt: now,
+			ID:        mangaID,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	chapters, err := s.listStoredChapters(ctx, mangaID)
+	if err != nil {
+		return nil, err
+	}
+	return &model.ChapterBulkMetadataResult{
+		UpdatedCount: len(updatedIDs),
+		Chapters:     chapters,
+	}, nil
+}
+
 func (s *Store) DeleteChapter(ctx context.Context, mangaID string, chapterID string) error {
 	if _, _, _, ok := importer.ParseProxyChapterID(chapterID); ok {
 		return ErrForbidden

@@ -118,6 +118,14 @@ UPDATE chapters
 SET sorting_index = ?
 WHERE id = ? AND manga_id = ?;
 
+-- name: UpdateChapterLanguageVersion :exec
+UPDATE chapters
+SET
+  lang_code = ?,
+  version = ?,
+  last_updated = ?
+WHERE id = ? AND manga_id = ?;
+
 -- name: ClearChapterSortingIndices :exec
 UPDATE chapters
 SET sorting_index = NULL

@@ -186,6 +186,41 @@
   align-items: center;
 }
 
+/* ---- Chapter bulk actions ---- */
+.chapter-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  min-height: 36px;
+}
+
+.chapter-bulk-bar--active {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  animation: fadeUp var(--duration-fast) var(--ease-out) both;
+}
+
+.chapter-row__select {
+  display: flex;
+  align-items: center;
+}
+
+.chapter-bulk-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chapter-bulk-bar__count {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
 /* ---- Chapter list ---- */
 .chapter-list {
   display: flex;
@@ -212,6 +247,11 @@
               transform var(--duration-fast) var(--ease-out),
               border-color var(--duration-fast) var(--ease-out);
   border-left: 2px solid transparent;
+}
+
+.chapter-row[aria-pressed="true"] {
+  background: var(--color-surface-raised);
+  border-left-color: var(--color-accent);
 }
 
 .chapter-row--readonly {
@@ -261,6 +301,44 @@
 
 .chapter-row__drag-handle:active {
   cursor: grabbing;
+}
+
+.chapter-row__select {
+  flex-shrink: 0;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+}
+
+.chapter-row__select:hover:not(:disabled),
+.chapter-row__select[aria-pressed="true"] {
+  background: var(--color-accent-muted);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.chapter-row__select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.chapter-row__select:disabled {
+  opacity: 0;
+  cursor: not-allowed;
+}
+
+.chapter-row__select-mark {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .chapter-row__main {
@@ -362,6 +440,24 @@
 
 .chapter-row__action--danger:hover {
   background: rgba(248, 113, 113, 0.1);
+  color: var(--color-error);
+}
+
+.chapter-bulk-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.chapter-bulk-modal__summary {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.chapter-bulk-modal__error {
+  margin: 0;
+  font-size: var(--text-sm);
   color: var(--color-error);
 }
 

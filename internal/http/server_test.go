@@ -80,6 +80,87 @@ func TestBackupEndpointReturnsJSONAttachment(t *testing.T) {
 	}
 }
 
+func TestBulkChapterMetadataEndpointUpdatesChapters(t *testing.T) {
+	dataStore, server, apiKey := newTestHTTPServer(t)
+	ctx := context.Background()
+	manga, err := dataStore.CreateManga(ctx, model.MangaPayload{PrimaryTitle: "Bulk"})
+	if err != nil {
+		t.Fatalf("CreateManga returned error: %v", err)
+	}
+	first, err := dataStore.CreateChapter(ctx, manga.ID, model.ChapterPayload{ChapNum: 1, Version: "Default"})
+	if err != nil {
+		t.Fatalf("CreateChapter first returned error: %v", err)
+	}
+	second, err := dataStore.CreateChapter(ctx, manga.ID, model.ChapterPayload{ChapNum: 2, Version: "Default"})
+	if err != nil {
+		t.Fatalf("CreateChapter second returned error: %v", err)
+	}
+
+	body, err := json.Marshal(model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID, second.ID},
+		LangCode:   testStringPointer("FR"),
+		Version:    testStringPointer("Scanlation"),
+	})
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPatch, "/api/manga/"+manga.ID+"/chapters/bulk-metadata", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var result model.ChapterBulkMetadataResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal returned error: %v", err)
+	}
+	if result.UpdatedCount != 2 || len(result.Chapters) != 2 {
+		t.Fatalf("result = %+v, want two updated chapters", result)
+	}
+	if result.Chapters[0].LangCode != "FR" || result.Chapters[0].Version != "Scanlation" {
+		t.Fatalf("first chapter = %+v, want updated language and version", result.Chapters[0])
+	}
+}
+
+func TestBulkChapterMetadataEndpointRejectsConflicts(t *testing.T) {
+	dataStore, server, apiKey := newTestHTTPServer(t)
+	ctx := context.Background()
+	manga, err := dataStore.CreateManga(ctx, model.MangaPayload{PrimaryTitle: "Bulk Conflict"})
+	if err != nil {
+		t.Fatalf("CreateManga returned error: %v", err)
+	}
+	first, err := dataStore.CreateChapter(ctx, manga.ID, model.ChapterPayload{ChapNum: 1, LangCode: "EN", Version: "Default"})
+	if err != nil {
+		t.Fatalf("CreateChapter first returned error: %v", err)
+	}
+	if _, err := dataStore.CreateChapter(ctx, manga.ID, model.ChapterPayload{ChapNum: 1, LangCode: "FR", Version: "Default"}); err != nil {
+		t.Fatalf("CreateChapter second returned error: %v", err)
+	}
+
+	body, err := json.Marshal(model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID},
+		LangCode:   testStringPointer("FR"),
+	})
+	if err != nil {
+		t.Fatalf("Marshal returned error: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPatch, "/api/manga/"+manga.ID+"/chapters/bulk-metadata", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusConflict, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "duplicate chapter identities") {
+		t.Fatalf("body = %s, want duplicate identity message", rec.Body.String())
+	}
+}
+
 func newTestHTTPServer(t *testing.T) (*store.Store, *Server, string) {
 	t.Helper()
 
@@ -115,6 +196,10 @@ func newTestHTTPServer(t *testing.T) (*store.Store, *Server, string) {
 	}
 
 	return dataStore, server, apiKey
+}
+
+func testStringPointer(value string) *string {
+	return &value
 }
 
 func requestBackup(t *testing.T, server *Server, apiKey string) []byte {

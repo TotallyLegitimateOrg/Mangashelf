@@ -61,6 +61,19 @@ func NormalizeChapterPayload(payload ChapterPayload) ChapterPayload {
 	return payload
 }
 
+func NormalizeChapterBulkMetadataPayload(payload ChapterBulkMetadataPayload) ChapterBulkMetadataPayload {
+	payload.ChapterIDs = NormalizeStringList(payload.ChapterIDs)
+	if payload.LangCode != nil {
+		langCode := defaultString(*payload.LangCode, "EN")
+		payload.LangCode = &langCode
+	}
+	if payload.Version != nil {
+		version := strings.TrimSpace(*payload.Version)
+		payload.Version = &version
+	}
+	return payload
+}
+
 func NormalizeChapterImportPayload(payload ChapterImportPayload) ChapterImportPayload {
 	payload.Provider = strings.ToLower(strings.TrimSpace(payload.Provider))
 	payload.Mode = strings.ToLower(strings.TrimSpace(payload.Mode))

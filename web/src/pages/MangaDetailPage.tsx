@@ -6,6 +6,9 @@ import { PROVIDERS } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -25,6 +28,12 @@ type SyncLogViewEntry = ChapterSourceSyncLog & {
 };
 
 const MAX_COLLAPSED_SYNC_LOGS_PER_SOURCE = 3;
+
+const BULK_LANGUAGE_OPTIONS = [
+  { value: "", label: "Keep current language" },
+  { value: "AR", label: "Arabic" },
+  { value: "EN", label: "English" },
+];
 
 function formatSyncLogTimestamp(createdAt: string): { timeLabel: string; dateLabel: string } {
   const date = new Date(createdAt);
@@ -141,6 +150,14 @@ export default function MangaDetailPage() {
   /* Chapter delete */
   const [deleteChapter, setDeleteChapter] = useState<ChapterListItem | null>(null);
 
+  /* Bulk chapter metadata */
+  const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
+  const [bulkMetadataOpen, setBulkMetadataOpen] = useState(false);
+  const [bulkLangCode, setBulkLangCode] = useState("");
+  const [bulkVersion, setBulkVersion] = useState("");
+  const [savingBulkMetadata, setSavingBulkMetadata] = useState(false);
+  const [bulkMetadataError, setBulkMetadataError] = useState<string | null>(null);
+
   /* Source unlink */
   const [unlinkSourceId, setUnlinkSourceId] = useState<string | null>(null);
 
@@ -175,6 +192,15 @@ export default function MangaDetailPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  useEffect(() => {
+    setSelectedChapterIds((current) => {
+      if (current.size === 0) return current;
+      const editableIds = new Set(chapters.filter((ch) => !ch.origin.readOnly).map((ch) => ch.id));
+      const next = new Set(Array.from(current).filter((chapterId) => editableIds.has(chapterId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [chapters]);
+
   const toggleSourceLogs = useCallback((sourceId: string) => {
     setExpandedSourceLogs((current) => {
       const next = new Set(current);
@@ -190,9 +216,46 @@ export default function MangaDetailPage() {
   /* Derive displayed chapters */
   const displayedChapters = reorderedChapters ?? chapters;
   const hasPendingReorder = reorderedChapters !== null;
+  const editableChapters = useMemo(() => chapters.filter((ch) => !ch.origin.readOnly), [chapters]);
+  const selectedCount = selectedChapterIds.size;
+  const allEditableSelected = editableChapters.length > 0
+    && editableChapters.every((ch) => selectedChapterIds.has(ch.id));
 
   /* Detect if the saved server order differs from chapter-number order */
   const hasCustomSavedOrder = chapters.some((ch) => ch.sortingIndex != null);
+
+  const clearChapterSelection = useCallback(() => {
+    setSelectedChapterIds(new Set());
+  }, []);
+
+  const toggleChapterSelection = useCallback((chapterId: string, checked: boolean) => {
+    setSelectedChapterIds((current) => {
+      const next = new Set(current);
+      if (checked) {
+        next.add(chapterId);
+      } else {
+        next.delete(chapterId);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllEditableChapters = useCallback(() => {
+    setSelectedChapterIds(new Set(editableChapters.map((ch) => ch.id)));
+  }, [editableChapters]);
+
+  const openBulkMetadataEditor = useCallback(() => {
+    setBulkLangCode("");
+    setBulkVersion("");
+    setBulkMetadataError(null);
+    setBulkMetadataOpen(true);
+  }, []);
+
+  const closeBulkMetadataEditor = useCallback(() => {
+    if (savingBulkMetadata) return;
+    setBulkMetadataOpen(false);
+    setBulkMetadataError(null);
+  }, [savingBulkMetadata]);
 
   /* Drag-and-drop handlers */
   const handleDragStart = (index: number, e: React.DragEvent) => {
@@ -302,6 +365,37 @@ export default function MangaDetailPage() {
       fetchAll();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to delete chapter", "error");
+    }
+  };
+
+  const handleBulkMetadataSubmit = async () => {
+    if (!id || selectedChapterIds.size === 0) return;
+    const langCode = bulkLangCode.trim();
+    const version = bulkVersion.trim();
+    if (!langCode && !version) {
+      setBulkMetadataError("Enter a language, a version, or both.");
+      return;
+    }
+    setSavingBulkMetadata(true);
+    setBulkMetadataError(null);
+    try {
+      const result = await api.bulkUpdateChapterMetadata(id, {
+        chapterIds: Array.from(selectedChapterIds),
+        ...(langCode ? { langCode } : {}),
+        ...(version ? { version } : {}),
+      });
+      setChapters(result.chapters);
+      setReorderedChapters(null);
+      clearChapterSelection();
+      setBulkMetadataOpen(false);
+      toast(`Updated ${result.updatedCount} chapter${result.updatedCount !== 1 ? "s" : ""}`, "success");
+      fetchAll();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update chapters";
+      setBulkMetadataError(message);
+      toast(message, "error");
+    } finally {
+      setSavingBulkMetadata(false);
     }
   };
 
@@ -474,6 +568,30 @@ export default function MangaDetailPage() {
                 </div>
               )}
 
+              <div className={`chapter-bulk-bar ${selectedCount > 0 ? "chapter-bulk-bar--active" : ""}`}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={selectAllEditableChapters}
+                  disabled={editableChapters.length === 0 || allEditableSelected}
+                >
+                  Select all editable
+                </Button>
+                {selectedCount > 0 && (
+                  <div className="chapter-bulk-bar__actions">
+                    <span className="chapter-bulk-bar__count">
+                      {selectedCount} selected
+                    </span>
+                    <Button size="sm" variant="secondary" onClick={clearChapterSelection}>
+                      Clear
+                    </Button>
+                    <Button size="sm" onClick={openBulkMetadataEditor}>
+                      Edit language/version
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               {/* Chapter list */}
               <div className={`chapter-list ${hasPendingReorder ? "chapter-list--reordering" : ""}`}>
                 {displayedChapters.map((ch, index) => {
@@ -482,6 +600,7 @@ export default function MangaDetailPage() {
                   const isDragging = dragIndex === index;
                   const isDragOver = dragOverIndex === index;
                   const canDrag = !isReadOnly;
+                  const isSelected = selectedChapterIds.has(ch.id);
 
                   return (
                     <div
@@ -501,7 +620,23 @@ export default function MangaDetailPage() {
                       onDragLeave={handleDragLeave}
                       onClick={() => !isDragging && handleChapterClick(ch)}
                       onKeyDown={(event) => handleChapterKeyDown(event, ch)}
+                      aria-pressed={isSelected}
                     >
+                      <button
+                        type="button"
+                        className="chapter-row__select"
+                        disabled={isReadOnly}
+                        aria-label={`${isSelected ? "Deselect" : "Select"} chapter ${ch.chapNum}`}
+                        aria-pressed={isSelected}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleChapterSelection(ch.id, !isSelected);
+                        }}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <span className="chapter-row__select-mark">✓</span>
+                      </button>
+
                       {/* Drag handle */}
                       {canDrag && (
                         <div className="chapter-row__drag-handle" title="Drag to reorder">
@@ -785,6 +920,44 @@ export default function MangaDetailPage() {
           )}
         </div>
       )}
+
+      <Modal
+        open={bulkMetadataOpen}
+        onClose={closeBulkMetadataEditor}
+        title="Edit selected chapters"
+        width="420px"
+        actions={
+          <>
+            <Button size="sm" variant="secondary" onClick={closeBulkMetadataEditor} disabled={savingBulkMetadata}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={handleBulkMetadataSubmit} loading={savingBulkMetadata}>
+              Apply
+            </Button>
+          </>
+        }
+      >
+        <div className="chapter-bulk-modal">
+          <p className="chapter-bulk-modal__summary">
+            Update {selectedCount} selected chapter{selectedCount !== 1 ? "s" : ""}. Leave a field blank to keep its current value.
+          </p>
+          <Select
+            label="Language"
+            value={bulkLangCode}
+            onChange={(event) => setBulkLangCode(event.target.value)}
+            options={BULK_LANGUAGE_OPTIONS}
+          />
+          <Input
+            label="Version"
+            value={bulkVersion}
+            onChange={(event) => setBulkVersion(event.target.value)}
+            placeholder="Default"
+          />
+          {bulkMetadataError && (
+            <p className="chapter-bulk-modal__error">{bulkMetadataError}</p>
+          )}
+        </div>
+      </Modal>
 
       {/* Confirm delete chapter */}
       <ConfirmDialog

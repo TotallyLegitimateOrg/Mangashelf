@@ -157,6 +157,17 @@ export interface ChapterPayload {
   pages: string[];
 }
 
+export interface ChapterBulkMetadataPayload {
+  chapterIds: string[];
+  langCode?: string;
+  version?: string;
+}
+
+export interface ChapterBulkMetadataResult {
+  updatedCount: number;
+  chapters: ChapterListItem[];
+}
+
 export interface ChapterSource {
   id: string;
   mangaId: string;

@@ -516,6 +516,209 @@ func TestCreateChapterFromArchiveReportsProgress(t *testing.T) {
 	}
 }
 
+func TestBulkUpdateChapterMetadataUpdatesSelectedFieldsOnly(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	manga := newTestManga(t, store, ctx)
+
+	sortingIndex := 7.0
+	publishDate := "2024-06-01"
+	first, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode:       "EN",
+		ChapNum:        1,
+		Title:          "First",
+		Version:        "Default",
+		SortingIndex:   &sortingIndex,
+		PublishDate:    &publishDate,
+		AdditionalInfo: []model.InfoEntry{{Key: "Source", Value: "Local"}},
+		Pages:          []string{"https://example.com/first-1.jpg", "https://example.com/first-2.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter first returned error: %v", err)
+	}
+	second, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode: "EN",
+		ChapNum:  2,
+		Title:    "Second",
+		Version:  "Default",
+		Pages:    []string{"https://example.com/second-1.jpg"},
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter second returned error: %v", err)
+	}
+
+	result, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID, second.ID},
+		LangCode:   testStringPtr("FR"),
+	})
+	if err != nil {
+		t.Fatalf("BulkUpdateChapterMetadata language returned error: %v", err)
+	}
+	if result.UpdatedCount != 2 || len(result.Chapters) != 2 {
+		t.Fatalf("bulk language result = %+v, want two updated chapters", result)
+	}
+
+	updatedFirst, err := store.GetChapter(ctx, manga.ID, first.ID)
+	if err != nil {
+		t.Fatalf("GetChapter first returned error: %v", err)
+	}
+	if updatedFirst.LangCode != "FR" || updatedFirst.Version != "Default" {
+		t.Fatalf("updated first identity = (%q, %q), want (FR, Default)", updatedFirst.LangCode, updatedFirst.Version)
+	}
+	if updatedFirst.Title != "First" || updatedFirst.ChapNum != 1 || updatedFirst.SortingIndex == nil || *updatedFirst.SortingIndex != sortingIndex {
+		t.Fatalf("updated first lost metadata: %+v", updatedFirst.ChapterListItem)
+	}
+	if updatedFirst.PublishDate == nil || *updatedFirst.PublishDate != "2024-06-01T00:00:00Z" {
+		t.Fatalf("updated first publish date = %v, want preserved date", updatedFirst.PublishDate)
+	}
+	if len(updatedFirst.Pages) != 2 || updatedFirst.Pages[0] != "https://example.com/first-1.jpg" {
+		t.Fatalf("updated first pages = %+v, want preserved pages", updatedFirst.Pages)
+	}
+	if !hasInfoEntry(updatedFirst.AdditionalInfo, "Source", "Local") {
+		t.Fatalf("updated first additional info = %+v, want preserved info", updatedFirst.AdditionalInfo)
+	}
+
+	result, err = store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID, second.ID},
+		Version:    testStringPtr("Scanlation"),
+	})
+	if err != nil {
+		t.Fatalf("BulkUpdateChapterMetadata version returned error: %v", err)
+	}
+	if result.UpdatedCount != 2 {
+		t.Fatalf("bulk version updated count = %d, want 2", result.UpdatedCount)
+	}
+	updatedSecond, err := store.GetChapter(ctx, manga.ID, second.ID)
+	if err != nil {
+		t.Fatalf("GetChapter second returned error: %v", err)
+	}
+	if updatedSecond.LangCode != "FR" || updatedSecond.Version != "Scanlation" {
+		t.Fatalf("updated second identity = (%q, %q), want (FR, Scanlation)", updatedSecond.LangCode, updatedSecond.Version)
+	}
+
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID},
+		LangCode:   testStringPtr("ES"),
+		Version:    testStringPtr("v2"),
+	}); err != nil {
+		t.Fatalf("BulkUpdateChapterMetadata language and version returned error: %v", err)
+	}
+	updatedFirst, err = store.GetChapter(ctx, manga.ID, first.ID)
+	if err != nil {
+		t.Fatalf("GetChapter first after both returned error: %v", err)
+	}
+	if updatedFirst.LangCode != "ES" || updatedFirst.Version != "v2" {
+		t.Fatalf("updated first identity after both = (%q, %q), want (ES, v2)", updatedFirst.LangCode, updatedFirst.Version)
+	}
+}
+
+func TestBulkUpdateChapterMetadataValidation(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	manga := newTestManga(t, store, ctx)
+	otherManga := newTestManga(t, store, ctx)
+	chapter, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{ChapNum: 1, Version: "Default"})
+	if err != nil {
+		t.Fatalf("CreateChapter returned error: %v", err)
+	}
+	otherChapter, err := store.CreateChapter(ctx, otherManga.ID, model.ChapterPayload{ChapNum: 1, Version: "Default"})
+	if err != nil {
+		t.Fatalf("CreateChapter other returned error: %v", err)
+	}
+
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		LangCode: testStringPtr("FR"),
+	}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("empty selection error = %v, want ErrValidation", err)
+	}
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{chapter.ID},
+	}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("missing field error = %v, want ErrValidation", err)
+	}
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{otherChapter.ID},
+		LangCode:   testStringPtr("FR"),
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("other manga chapter error = %v, want ErrNotFound", err)
+	}
+	proxyID := importer.CreateProxyChapterID("cubari", "source-id", importer.CreateChapterIdentityKey(1, "EN", "Default"))
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{proxyID},
+		LangCode:   testStringPtr("FR"),
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("proxy chapter error = %v, want ErrForbidden", err)
+	}
+}
+
+func TestBulkUpdateChapterMetadataBlocksConflictsWithoutPartialUpdate(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	manga := newTestManga(t, store, ctx)
+	first, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode: "EN",
+		ChapNum:  1,
+		Title:    "First",
+		Version:  "Default",
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter first returned error: %v", err)
+	}
+	second, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode: "FR",
+		ChapNum:  1,
+		Title:    "Second",
+		Version:  "Default",
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter second returned error: %v", err)
+	}
+
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{first.ID},
+		LangCode:   testStringPtr("FR"),
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("conflict with unselected chapter error = %v, want ErrConflict", err)
+	}
+
+	reloadedFirst, err := store.GetChapter(ctx, manga.ID, first.ID)
+	if err != nil {
+		t.Fatalf("GetChapter first returned error: %v", err)
+	}
+	reloadedSecond, err := store.GetChapter(ctx, manga.ID, second.ID)
+	if err != nil {
+		t.Fatalf("GetChapter second returned error: %v", err)
+	}
+	if reloadedFirst.LangCode != "EN" || reloadedSecond.LangCode != "FR" {
+		t.Fatalf("conflict partially updated chapters: first=%q second=%q", reloadedFirst.LangCode, reloadedSecond.LangCode)
+	}
+
+	third, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode: "EN",
+		ChapNum:  2,
+		Title:    "Third",
+		Version:  "Default",
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter third returned error: %v", err)
+	}
+	fourth, err := store.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		LangCode: "FR",
+		ChapNum:  2,
+		Title:    "Fourth",
+		Version:  "Default",
+	})
+	if err != nil {
+		t.Fatalf("CreateChapter fourth returned error: %v", err)
+	}
+	if _, err := store.BulkUpdateChapterMetadata(ctx, manga.ID, model.ChapterBulkMetadataPayload{
+		ChapterIDs: []string{third.ID, fourth.ID},
+		LangCode:   testStringPtr("ES"),
+	}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("conflict within selection error = %v, want ErrConflict", err)
+	}
+}
+
 func chapterImportPayload(provider string, mode string, url string) model.ChapterImportPayload {
 	config, err := json.Marshal(map[string]string{"url": url})
 	if err != nil {
@@ -575,6 +778,10 @@ func hasInfoEntry(entries []model.InfoEntry, key string, value string) bool {
 		}
 	}
 	return false
+}
+
+func testStringPtr(value string) *string {
+	return &value
 }
 
 type cubariFixture struct {

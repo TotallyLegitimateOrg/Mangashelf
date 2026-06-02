@@ -964,6 +964,34 @@ func (q *Queries) UpdateChapter(ctx context.Context, arg UpdateChapterParams) er
 	return err
 }
 
+const updateChapterLanguageVersion = `-- name: UpdateChapterLanguageVersion :exec
+UPDATE chapters
+SET
+  lang_code = ?,
+  version = ?,
+  last_updated = ?
+WHERE id = ? AND manga_id = ?
+`
+
+type UpdateChapterLanguageVersionParams struct {
+	LangCode    string
+	Version     string
+	LastUpdated int64
+	ID          string
+	MangaID     string
+}
+
+func (q *Queries) UpdateChapterLanguageVersion(ctx context.Context, arg UpdateChapterLanguageVersionParams) error {
+	_, err := q.db.ExecContext(ctx, updateChapterLanguageVersion,
+		arg.LangCode,
+		arg.Version,
+		arg.LastUpdated,
+		arg.ID,
+		arg.MangaID,
+	)
+	return err
+}
+
 const updateChapterSortingIndex = `-- name: UpdateChapterSortingIndex :exec
 UPDATE chapters
 SET sorting_index = ?

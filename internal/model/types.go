@@ -148,6 +148,17 @@ type ChapterPayload struct {
 	Pages          []string    `json:"pages"`
 }
 
+type ChapterBulkMetadataPayload struct {
+	ChapterIDs []string `json:"chapterIds"`
+	LangCode   *string  `json:"langCode,omitempty"`
+	Version    *string  `json:"version,omitempty"`
+}
+
+type ChapterBulkMetadataResult struct {
+	UpdatedCount int               `json:"updatedCount"`
+	Chapters     []ChapterListItem `json:"chapters"`
+}
+
 type ChapterSource struct {
 	ID                   string          `json:"id"`
 	MangaID              string          `json:"mangaId"`

@@ -8,6 +8,8 @@ import type {
   ChapterListItem,
   ChapterDetail,
   ChapterPayload,
+  ChapterBulkMetadataPayload,
+  ChapterBulkMetadataResult,
   ChapterSource,
   ChapterSourceSyncLog,
   ChapterImportPayload,
@@ -338,6 +340,17 @@ export async function updateChapter(
   return request<ChapterDetail>(
     "PUT",
     `/api/manga/${mangaId}/chapters/${chapterId}`,
+    payload
+  );
+}
+
+export async function bulkUpdateChapterMetadata(
+  mangaId: string,
+  payload: ChapterBulkMetadataPayload
+): Promise<ChapterBulkMetadataResult> {
+  return request<ChapterBulkMetadataResult>(
+    "PATCH",
+    `/api/manga/${mangaId}/chapters/bulk-metadata`,
     payload
   );
 }

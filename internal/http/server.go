@@ -117,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/manga/{id}/chapters", s.requireAuth(s.handleListChapters))
 	mux.Handle("POST /api/manga/{id}/chapters", s.requireAuth(s.handleCreateChapter))
 	mux.Handle("POST /api/manga/{id}/chapters/upload", s.requireAuth(s.handleUploadChapter))
+	mux.Handle("PATCH /api/manga/{id}/chapters/bulk-metadata", s.requireAuth(s.handleBulkUpdateChapterMetadata))
 	mux.Handle("POST /api/manga/{id}/chapter-imports", s.requireAuth(s.handleCreateChapterImport))
 	mux.Handle("GET /api/manga/{id}/chapters/{chapterId}", s.requireAuth(s.handleGetChapter))
 	mux.Handle("PUT /api/manga/{id}/chapters/{chapterId}", s.requireAuth(s.handleUpdateChapter))
@@ -479,6 +480,19 @@ func (s *Server) handleUpdateChapter(w http.ResponseWriter, r *http.Request, _ *
 		return
 	}
 	s.writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleBulkUpdateChapterMetadata(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
+	var payload model.ChapterBulkMetadataPayload
+	if !s.decodeJSON(w, r, &payload) {
+		return
+	}
+	result, err := s.store.BulkUpdateChapterMetadata(r.Context(), r.PathValue("id"), payload)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleDeleteChapter(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
