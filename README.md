@@ -2,6 +2,28 @@
 
 Mangashelf is a self-hosted manga library manager with Paperback support.
 
+## Install
+
+Install the latest release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/TotallyLegitimateOrg/Mangashelf/main/install.sh | sh
+```
+
+Pin a specific release:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/TotallyLegitimateOrg/Mangashelf/main/install.sh | VERSION=v1.0.2 sh
+```
+
+Useful environment variables:
+
+- `VERSION`: release tag to install, such as `v1.0.2`; defaults to `latest`.
+- `MOVE`: set to `0` to download into the current directory instead of installing into `PATH`; defaults to `1`.
+- `INSTALL_DIR`: target directory; defaults to `/usr/local/bin` when `MOVE=1`, otherwise the current directory.
+- `BIN_NAME`: installed binary name; defaults to the release binary name, `mangashelf` or `mangashelf.exe` on Windows.
+- `OS` and `ARCH`: override platform detection, for example `linux` and `arm64`.
+
 ## Runtime Configuration
 
 | Variable | Default | Description |
