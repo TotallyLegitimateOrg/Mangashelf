@@ -22,6 +22,7 @@ import type {
   CollectionPayload,
   CollectionMangaPayload,
   CollectionChangesPayload,
+  BackupRestoreResult,
 } from "./types";
 
 const TOKEN_KEY = "mangashelf_token";
@@ -184,6 +185,40 @@ export async function getExtensionMetadata(): Promise<ExtensionMetadata> {
 
 export async function getBuildInfo(): Promise<BuildInfo> {
   return request<BuildInfo>("GET", "/api/buildinfo");
+}
+
+/* ---- Backups ---- */
+
+export async function downloadBackup(): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getStoredToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch("/api/backups/export", { method: "GET", headers });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new ApiError(parseApiErrorMessage(res.status, text), res.status);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `mangashelf-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function restoreBackup(file: File): Promise<BackupRestoreResult> {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    throw new Error("Backup file must contain valid JSON");
+  }
+  return request<BackupRestoreResult>("POST", "/api/backups/restore", payload);
 }
 
 /* ---- Manga ---- */

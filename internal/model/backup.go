@@ -13,6 +13,14 @@ type Backup struct {
 	ChapterSources   []BackupChapterSource   `json:"chapterSources"`
 }
 
+type BackupRestoreResult struct {
+	MangaCount           int `json:"mangaCount"`
+	ChapterCount         int `json:"chapterCount"`
+	CollectionCount      int `json:"collectionCount"`
+	DiscoverSectionCount int `json:"discoverSectionCount"`
+	ChapterSourceCount   int `json:"chapterSourceCount"`
+}
+
 type BackupManga struct {
 	ID              string      `json:"id"`
 	PrimaryTitle    string      `json:"primaryTitle"`

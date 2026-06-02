@@ -193,6 +193,14 @@ export interface ChapterImportResult {
   chapters: ChapterDetail[];
 }
 
+export interface BackupRestoreResult {
+  mangaCount: number;
+  chapterCount: number;
+  collectionCount: number;
+  discoverSectionCount: number;
+  chapterSourceCount: number;
+}
+
 /* ---- Provider definitions ---- */
 
 export interface ProviderDefinition {

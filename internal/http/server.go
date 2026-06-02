@@ -89,7 +89,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/buildinfo", s.handleBuildInfo)
-	mux.Handle("GET /api/backup", s.requireAuth(s.handleBackup))
+	mux.Handle("GET /api/backups/export", s.requireAuth(s.handleBackupExport))
+	mux.Handle("POST /api/backups/restore", s.requireAuth(s.handleBackupRestore))
 	mux.HandleFunc("GET /api/auth/needs-setup", s.handleNeedsSetup)
 	mux.HandleFunc("POST /api/auth/setup", s.handleSetup)
 	mux.HandleFunc("POST /api/auth/login", s.handleLogin)
@@ -171,7 +172,7 @@ func (s *Server) handleBuildInfo(w http.ResponseWriter, _ *http.Request) {
 	s.writeJSON(w, http.StatusOK, buildinfo.Current())
 }
 
-func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
+func (s *Server) handleBackupExport(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
 	backup, err := s.store.ExportBackup(r.Context())
 	if err != nil {
 		s.writeError(w, err)
@@ -187,6 +188,19 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request, _ *store.U
 	if err := encoder.Encode(backup); err != nil {
 		s.writeError(w, err)
 	}
+}
+
+func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request, _ *store.UserIdentity) {
+	var backup model.Backup
+	if !s.decodeJSON(w, r, &backup) {
+		return
+	}
+	result, err := s.store.RestoreBackup(r.Context(), &backup)
+	if err != nil {
+		s.writeError(w, err)
+		return
+	}
+	s.writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleNeedsSetup(w http.ResponseWriter, r *http.Request) {

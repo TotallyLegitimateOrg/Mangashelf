@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -214,6 +215,136 @@ func TestExportBackupIsDeterministic(t *testing.T) {
 	secondJSON := marshalBackupJSON(t, second)
 	if !bytes.Equal(firstJSON, secondJSON) {
 		t.Fatalf("backup JSON differs across repeated exports\nfirst:  %s\nsecond: %s", firstJSON, secondJSON)
+	}
+}
+
+func TestRestoreBackupRoundTripsExportedData(t *testing.T) {
+	ctx := context.Background()
+	source := newTestStore(t)
+
+	user, err := source.CreateInitialUser(ctx, "source-user", "secret123")
+	if err != nil {
+		t.Fatalf("CreateInitialUser returned error: %v", err)
+	}
+	if _, err := source.CreateAPIKey(ctx, user.ID, "source-key"); err != nil {
+		t.Fatalf("CreateAPIKey returned error: %v", err)
+	}
+	manga := mustCreateMangaWithPayload(t, source, ctx, model.MangaPayload{
+		PrimaryTitle:    "Round Trip",
+		SecondaryTitles: []string{"RT"},
+		ArtworkURLs:     []string{"https://example.com/art.jpg"},
+		TagGroups:       []model.TagGroup{{Title: "Genres", Tags: []model.Tag{{Title: "Drama"}}}},
+	})
+	chapter := mustCreateChapterForManga(t, source, ctx, manga.ID, 1, "Round Trip Chapter", "2024-05-01")
+	collection, err := source.CreateCollection(ctx, model.CollectionPayload{Title: "Reading"})
+	if err != nil {
+		t.Fatalf("CreateCollection returned error: %v", err)
+	}
+	if err := source.ReplaceCollectionManga(ctx, collection.ID, model.CollectionMangaPayload{MangaIDs: []string{manga.ID}}); err != nil {
+		t.Fatalf("ReplaceCollectionManga returned error: %v", err)
+	}
+	if _, err := source.CreateDiscoverSection(ctx, model.DiscoverSectionPayload{
+		Title: "Manual",
+		Type:  "simpleCarousel",
+		Mode:  "manual",
+		Items: []model.DiscoverSectionItem{{
+			ID:       "round-trip-item",
+			Type:     "simpleCarouselItem",
+			MangaID:  manga.ID,
+			ImageURL: "https://example.com/item.jpg",
+			Title:    manga.PrimaryTitle,
+			Subtitle: chapter.Title,
+		}},
+	}); err != nil {
+		t.Fatalf("CreateDiscoverSection returned error: %v", err)
+	}
+
+	backup, err := source.ExportBackup(ctx)
+	if err != nil {
+		t.Fatalf("ExportBackup returned error: %v", err)
+	}
+	target := newTestStore(t)
+	if _, err := target.RestoreBackup(ctx, backup); err != nil {
+		t.Fatalf("RestoreBackup returned error: %v", err)
+	}
+	restored, err := target.ExportBackup(ctx)
+	if err != nil {
+		t.Fatalf("ExportBackup restored returned error: %v", err)
+	}
+
+	if !bytes.Equal(marshalBackupJSON(t, backup), marshalBackupJSON(t, restored)) {
+		t.Fatalf("restored backup differs\nbefore: %s\nafter:  %s", marshalBackupJSON(t, backup), marshalBackupJSON(t, restored))
+	}
+}
+
+func TestRestoreBackupReplacesLibraryDataAndPreservesAuth(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+
+	user, err := store.CreateInitialUser(ctx, "restore-user", "secret123")
+	if err != nil {
+		t.Fatalf("CreateInitialUser returned error: %v", err)
+	}
+	if _, err := store.CreateAPIKey(ctx, user.ID, "restore-key"); err != nil {
+		t.Fatalf("CreateAPIKey returned error: %v", err)
+	}
+	manga := mustCreateMangaWithPayload(t, store, ctx, model.MangaPayload{PrimaryTitle: "Keep"})
+	backup, err := store.ExportBackup(ctx)
+	if err != nil {
+		t.Fatalf("ExportBackup returned error: %v", err)
+	}
+	extra := mustCreateMangaWithPayload(t, store, ctx, model.MangaPayload{PrimaryTitle: "Remove"})
+
+	result, err := store.RestoreBackup(ctx, backup)
+	if err != nil {
+		t.Fatalf("RestoreBackup returned error: %v", err)
+	}
+	if result.MangaCount != 1 {
+		t.Fatalf("MangaCount = %d, want 1", result.MangaCount)
+	}
+	if _, err := store.GetManga(ctx, manga.ID); err != nil {
+		t.Fatalf("expected restored manga %s: %v", manga.ID, err)
+	}
+	if _, err := store.GetManga(ctx, extra.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetManga extra err = %v, want ErrNotFound", err)
+	}
+	keys, err := store.ListAPIKeys(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListAPIKeys returned error: %v", err)
+	}
+	if len(keys) != 1 {
+		t.Fatalf("api key count = %d, want 1", len(keys))
+	}
+}
+
+func TestRestoreBackupValidatesPayload(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+
+	if _, err := store.RestoreBackup(ctx, &model.Backup{SchemaVersion: model.BackupSchemaVersion + 1}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("unsupported schema err = %v, want ErrValidation", err)
+	}
+	if _, err := store.RestoreBackup(ctx, &model.Backup{
+		SchemaVersion: model.BackupSchemaVersion,
+		Chapters: []model.BackupChapter{{
+			ID:          "orphan",
+			MangaID:     "missing",
+			ChapNum:     1,
+			LastUpdated: "2024-01-01T00:00:00Z",
+		}},
+	}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("missing manga err = %v, want ErrValidation", err)
+	}
+	if _, err := store.RestoreBackup(ctx, &model.Backup{
+		SchemaVersion: model.BackupSchemaVersion,
+		Manga: []model.BackupManga{{
+			ID:           "bad-date",
+			PrimaryTitle: "Bad Date",
+			CreatedAt:    "nope",
+			UpdatedAt:    "2024-01-01T00:00:00Z",
+		}},
+	}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("bad date err = %v, want ErrValidation", err)
 	}
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import * as api from "@/lib/api";
 import type { APIKey, BuildInfo } from "@/lib/types";
 import { useAuth } from "@/lib/auth";
@@ -16,6 +16,7 @@ export default function SettingsPage() {
   const [keys, setKeys] = useState<APIKey[]>([]);
   const [buildInfo, setBuildInfo] = useState<BuildInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const restoreInputRef = useRef<HTMLInputElement | null>(null);
 
   /* Create key */
   const [showCreate, setShowCreate] = useState(false);
@@ -25,6 +26,11 @@ export default function SettingsPage() {
 
   /* Delete key */
   const [deleteTarget, setDeleteTarget] = useState<APIKey | null>(null);
+
+  /* Backup and restore */
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<File | null>(null);
+  const [restoringBackup, setRestoringBackup] = useState(false);
 
   const fetchKeys = useCallback(async () => {
     try {
@@ -93,6 +99,49 @@ export default function SettingsPage() {
     }
   };
 
+  const handleDownloadBackup = async () => {
+    setDownloadingBackup(true);
+    try {
+      await api.downloadBackup();
+      toast("Backup downloaded", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to download backup", "error");
+    } finally {
+      setDownloadingBackup(false);
+    }
+  };
+
+  const handleRestoreBackup = async () => {
+    if (!restoreTarget) return;
+    setRestoringBackup(true);
+    try {
+      const result = await api.restoreBackup(restoreTarget);
+      toast(
+        `Restored ${result.mangaCount} manga, ${result.chapterCount} chapters, ${result.collectionCount} collections, ${result.discoverSectionCount} discover sections, and ${result.chapterSourceCount} sources`,
+        "success"
+      );
+      setRestoreTarget(null);
+      if (restoreInputRef.current) {
+        restoreInputRef.current.value = "";
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to restore backup", "error");
+    } finally {
+      setRestoringBackup(false);
+    }
+  };
+
+  const handleSelectRestoreFile = () => {
+    if (restoreInputRef.current) {
+      restoreInputRef.current.value = "";
+    }
+    restoreInputRef.current?.click();
+  };
+
+  const handleRestoreFileSelected = (file: File | null) => {
+    setRestoreTarget(file);
+  };
+
   if (loading) return <PageSpinner />;
 
   return (
@@ -135,6 +184,32 @@ export default function SettingsPage() {
             <span className="settings-card__label">User ID</span>
             <span className="settings-card__value settings-card__value--mono">{user?.id}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Backup and restore */}
+      <div className="settings-section">
+        <h2 className="settings-section__title font-display">Backup & Restore</h2>
+        <div className="settings-backup-actions">
+          <Button onClick={handleDownloadBackup} loading={downloadingBackup}>
+            Download Backup
+          </Button>
+          <input
+            ref={restoreInputRef}
+            className="settings-restore__input"
+            type="file"
+            accept="application/json,.json"
+            disabled={restoringBackup}
+            onChange={(event) => handleRestoreFileSelected(event.target.files?.[0] ?? null)}
+          />
+          <Button
+            type="button"
+            variant="danger"
+            loading={restoringBackup}
+            onClick={handleSelectRestoreFile}
+          >
+            Restore Backup
+          </Button>
         </div>
       </div>
 
@@ -220,6 +295,16 @@ export default function SettingsPage() {
         title="Delete API Key"
         message={deleteTarget ? `Delete API key "${deleteTarget.name}"? Any integrations using this key will stop working.` : ""}
         confirmLabel="Delete"
+        danger
+      />
+
+      <ConfirmDialog
+        open={!!restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+        onConfirm={handleRestoreBackup}
+        title="Restore Backup"
+        message={restoreTarget ? `Restore "${restoreTarget.name}"? This will replace current manga, chapters, collections, discover sections, and chapter sources.` : ""}
+        confirmLabel="Restore"
         danger
       />
     </div>

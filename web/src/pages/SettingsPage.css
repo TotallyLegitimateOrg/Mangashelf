@@ -116,6 +116,18 @@
   color: var(--color-text-tertiary);
 }
 
+/* ---- Backup and restore ---- */
+.settings-backup-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.settings-restore__input {
+  display: none;
+}
+
 /* ---- Created key reveal ---- */
 .settings-key-created__warning {
   font-size: var(--text-sm);
@@ -165,11 +177,15 @@
   .settings-card__row {
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-1);
+    gap: var(--space-3);
   }
 
   .settings-card__value {
     text-align: left;
   }
 
+  .settings-backup-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }

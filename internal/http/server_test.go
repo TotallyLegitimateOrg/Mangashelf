@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/auth"
@@ -21,7 +22,7 @@ import (
 func TestBackupEndpointRequiresAuth(t *testing.T) {
 	_, server, _ := newTestHTTPServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/backup", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/backups/export", nil)
 	rec := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(rec, req)
@@ -119,7 +120,7 @@ func newTestHTTPServer(t *testing.T) (*store.Store, *Server, string) {
 func requestBackup(t *testing.T, server *Server, apiKey string) []byte {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/backup", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/backups/export", nil)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	rec := httptest.NewRecorder()
 
@@ -136,4 +137,75 @@ func requestBackup(t *testing.T, server *Server, apiKey string) []byte {
 	}
 
 	return rec.Body.Bytes()
+}
+
+func TestBackupRestoreEndpointRequiresAuth(t *testing.T) {
+	_, server, _ := newTestHTTPServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/backups/restore", strings.NewReader(`{}`))
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBackupRestoreEndpointReplacesLibraryData(t *testing.T) {
+	dataStore, server, apiKey := newTestHTTPServer(t)
+	ctx := context.Background()
+
+	manga, err := dataStore.CreateManga(ctx, model.MangaPayload{PrimaryTitle: "Restored"})
+	if err != nil {
+		t.Fatalf("CreateManga returned error: %v", err)
+	}
+	if _, err := dataStore.CreateChapter(ctx, manga.ID, model.ChapterPayload{
+		ChapNum: 1,
+		Title:   "Restored Chapter",
+		Pages:   []string{"https://example.com/restored.jpg"},
+	}); err != nil {
+		t.Fatalf("CreateChapter returned error: %v", err)
+	}
+	body := requestBackup(t, server, apiKey)
+
+	if _, err := dataStore.CreateManga(ctx, model.MangaPayload{PrimaryTitle: "Existing"}); err != nil {
+		t.Fatalf("CreateManga existing returned error: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/backups/restore", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	var result model.BackupRestoreResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("Unmarshal restore result returned error: %v", err)
+	}
+	if result.MangaCount != 1 || result.ChapterCount != 1 {
+		t.Fatalf("restore result = %+v, want one manga and chapter", result)
+	}
+
+	after := requestBackup(t, server, apiKey)
+	if !bytes.Equal(body, after) {
+		t.Fatalf("backup after restore differs\nbefore: %s\nafter:  %s", body, after)
+	}
+}
+
+func TestBackupRestoreEndpointRejectsInvalidPayload(t *testing.T) {
+	_, server, apiKey := newTestHTTPServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/backups/restore", strings.NewReader(`{"schemaVersion":999}`))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusBadRequest, rec.Body.String())
+	}
 }
