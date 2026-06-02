@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/TotallyLegitimateOrg/Mangashelf/internal/config"
@@ -22,7 +24,7 @@ func Open(ctx context.Context, cfg config.Config) (*Database, error) {
 		return nil, fmt.Errorf("create database directory: %w", err)
 	}
 
-	conn, err := sql.Open("sqlite", cfg.DatabasePath)
+	conn, err := sql.Open("sqlite", sqliteDSN(cfg.DatabasePath))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -36,11 +38,6 @@ func Open(ctx context.Context, cfg config.Config) (*Database, error) {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = ON;"); err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
-
 	if err := applyMigrations(ctx, conn); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("apply migrations: %w", err)
@@ -50,4 +47,24 @@ func Open(ctx context.Context, cfg config.Config) (*Database, error) {
 		SQL:     conn,
 		Queries: gen.New(conn),
 	}, nil
+}
+
+func sqliteDSN(databasePath string) string {
+	pragmas := []string{
+		"busy_timeout(5000)",
+		"foreign_keys(ON)",
+	}
+	if databasePath != ":memory:" && !strings.Contains(databasePath, "mode=memory") {
+		pragmas = append(pragmas, "journal_mode(WAL)")
+	}
+
+	separator := "?"
+	if strings.Contains(databasePath, "?") {
+		separator = "&"
+	}
+	params := make([]string, 0, len(pragmas))
+	for _, pragma := range pragmas {
+		params = append(params, "_pragma="+url.QueryEscape(pragma))
+	}
+	return databasePath + separator + strings.Join(params, "&")
 }

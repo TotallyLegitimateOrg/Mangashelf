@@ -422,6 +422,9 @@ func sortMangaByAdjustedChapterCount(items []model.Manga, sortOption string) {
 			if items[i].ChapterCount != items[j].ChapterCount {
 				return items[i].ChapterCount < items[j].ChapterCount
 			}
+			if items[i].UpdatedAt != items[j].UpdatedAt {
+				return items[i].UpdatedAt > items[j].UpdatedAt
+			}
 			leftTitle := strings.ToLower(items[i].PrimaryTitle)
 			rightTitle := strings.ToLower(items[j].PrimaryTitle)
 			if leftTitle != rightTitle {
@@ -433,6 +436,9 @@ func sortMangaByAdjustedChapterCount(items []model.Manga, sortOption string) {
 		sort.SliceStable(items, func(i, j int) bool {
 			if items[i].ChapterCount != items[j].ChapterCount {
 				return items[i].ChapterCount > items[j].ChapterCount
+			}
+			if items[i].UpdatedAt != items[j].UpdatedAt {
+				return items[i].UpdatedAt > items[j].UpdatedAt
 			}
 			leftTitle := strings.ToLower(items[i].PrimaryTitle)
 			rightTitle := strings.ToLower(items[j].PrimaryTitle)
