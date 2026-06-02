@@ -71,6 +71,16 @@ export interface MangaPayload {
   additionalInfo: InfoEntry[];
 }
 
+export type MangaSortOption =
+  | "updated_desc"
+  | "updated_asc"
+  | "title_asc"
+  | "title_desc"
+  | "rating_desc"
+  | "rating_asc"
+  | "chapters_desc"
+  | "chapters_asc";
+
 export interface MangaSearchOptions {
   q?: string;
   contentRating?: string[];
@@ -78,7 +88,7 @@ export interface MangaSearchOptions {
   tag?: string[];
   minRating?: number | null;
   maxRating?: number | null;
-  sort?: string;
+  sort?: MangaSortOption;
 }
 
 export interface Collection {

@@ -1,12 +1,23 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router";
 import * as api from "@/lib/api";
-import type { Manga } from "@/lib/types";
+import type { Manga, MangaSortOption } from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import "./LibraryPage.css";
+
+const SORT_OPTIONS: { value: MangaSortOption; label: string }[] = [
+  { value: "updated_desc", label: "Recently updated" },
+  { value: "updated_asc", label: "Oldest updated" },
+  { value: "title_asc", label: "Title A-Z" },
+  { value: "title_desc", label: "Title Z-A" },
+  { value: "rating_desc", label: "Highest rating" },
+  { value: "rating_asc", label: "Lowest rating" },
+  { value: "chapters_desc", label: "Most chapters" },
+  { value: "chapters_asc", label: "Fewest chapters" },
+];
 
 export default function LibraryPage() {
   const navigate = useNavigate();
@@ -15,6 +26,7 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sort, setSort] = useState<MangaSortOption>("updated_desc");
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -23,14 +35,17 @@ export default function LibraryPage() {
 
   const fetchManga = useCallback(async () => {
     try {
-      const items = await api.listManga(debouncedSearch || undefined);
+      const items = await api.listManga({
+        q: debouncedSearch || undefined,
+        sort,
+      });
       setManga(items);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Failed to load library", "error");
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, toast]);
+  }, [debouncedSearch, sort, toast]);
 
   useEffect(() => {
     fetchManga();
@@ -50,18 +65,35 @@ export default function LibraryPage() {
           </div>
         </div>
         <div className="page-header__actions">
-          <div className="library-search">
-            <span className="library-search__icon">🔍</span>
-            <input
-              className="library-search__input"
-              placeholder="Search manga…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="library-toolbar">
+            <div className="library-search">
+              <span className="library-search__icon" aria-hidden="true" />
+              <input
+                className="library-search__input"
+                placeholder="Search manga…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <label className="library-sort">
+              <select
+                className="library-sort__select"
+                value={sort}
+                aria-label="Sort library"
+                onChange={(e) => setSort(e.target.value as MangaSortOption)}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="library-sort__chevron" aria-hidden="true" />
+            </label>
           </div>
-          <Button onClick={() => navigate("/manga/new")}>
-            + Add Manga
-          </Button>
+          <button className="library-add" type="button" aria-label="Add manga" onClick={() => navigate("/manga/new")}>
+            <span className="library-add__icon" aria-hidden="true" />
+          </button>
         </div>
       </div>
 
