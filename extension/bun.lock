@@ -1,0 +1,17 @@
+{
+  "lockfileVersion": 1,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "Mangashelf",
+      "devDependencies": {
+        "@paperback/types": "1.0.0-alpha.82",
+      },
+    },
+  },
+  "packages": {
+    "@paperback/types": ["@paperback/types@1.0.0-alpha.82", "", { "dependencies": { "chai": "^6.2.1" } }, "sha512-qvi+CW1duvU7dOJZdtFCtFnT6bDqpmzIzA1bZ0V+gRApA4dLRrM+nlllLjKKF59v4NBprqNf1c/dxW6NdIquSg=="],
+
+    "chai": ["chai@6.2.2", "", {}, "sha512-NUPRluOfOiTKBKvWPtSD4PhFvWCqOi0BGStNWs57X9js7XGTprSmFoz5F0tWhR4WPjNeR9jXqdC7/UpSJTnlRg=="],
+  }
+}

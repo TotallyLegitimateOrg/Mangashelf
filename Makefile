@@ -16,9 +16,11 @@ clean:
 
 dev:
 	$(BUN) install; \
+	MANGASHELF_DEV_WEB_URL=http://127.0.0.1:$${MANGASHELF_DEV_WEB_PORT:-5173} \
+	MANGASHELF_DEV_EXTENSION_URL=http://127.0.0.1:$${MANGASHELF_DEV_EXTENSION_PORT:-38181} \
 	$(GO) tool air -c .air.toml & backend=$$!; \
-	$(BUN) run web:dev & frontend=$$!; \
-	$(BUN) run extension:dev & extension=$$!; \
+	MANGASHELF_DEV_WEB_PORT=$${MANGASHELF_DEV_WEB_PORT:-5173} $(BUN) run web:dev & frontend=$$!; \
+	MANGASHELF_DEV_EXTENSION_PORT=$${MANGASHELF_DEV_EXTENSION_PORT:-38181} $(BUN) run extension:dev & extension=$$!; \
 	trap 'kill $$backend $$frontend $$extension 2>/dev/null' INT TERM EXIT; \
 	wait
 
